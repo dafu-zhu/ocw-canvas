@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { RequireAuth } from "./components/RequireAuth";
 import { AnnouncementsPage } from "./pages/AnnouncementsPage";
+import { AssignmentDetailPage } from "./pages/AssignmentDetailPage";
 import { CalendarPage } from "./pages/CalendarPage";
+import { CourseAssignmentsPage } from "./pages/CourseAssignmentsPage";
 import { CourseHomePage } from "./pages/CourseHomePage";
 import { CourseModulesPage } from "./pages/CourseModulesPage";
 import { CoursePlaceholderPage } from "./pages/CoursePlaceholderPage";
@@ -30,11 +32,11 @@ export default function App() {
       <Route path="/courses/:courseId/videos" element={<Auth><CourseVideosPage /></Auth>} />
       <Route
         path="/courses/:courseId/assignments"
-        element={<Auth><CoursePlaceholderPage section="Assignments" /></Auth>}
+        element={<Auth><CourseAssignmentsPage /></Auth>}
       />
       <Route
         path="/courses/:courseId/assignments/:assignmentId"
-        element={<Auth><CoursePlaceholderPage section="Assignments" /></Auth>}
+        element={<Auth><AssignmentDetailPage /></Auth>}
       />
       <Route
         path="/courses/:courseId/grades"

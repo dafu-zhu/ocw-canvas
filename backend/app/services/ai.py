@@ -204,14 +204,38 @@ def _invoke(system_prompt: str, user_prompt: str, files: dict[str, bytes]) -> tu
     return _invoke_anthropic_api(system_prompt, user_prompt, files)
 
 
+def _describe_exc(exc: BaseException) -> str:
+    """Format an exception with whatever stdout/stderr/exit_code it carries (e.g. claude-agent-sdk's
+    ProcessError). Used to surface a real diagnostic on `ai_solution.error` instead of an opaque
+    ``ProcessError: Command failed with exit code 1``."""
+    parts: list[str] = [f"{type(exc).__name__}: {exc}"]
+    for attr in ("exit_code", "returncode", "stderr", "stdout"):
+        v = getattr(exc, attr, None)
+        if v in (None, "", b""):
+            continue
+        if isinstance(v, bytes):
+            v = v.decode("utf-8", errors="replace")
+        s = str(v).strip()
+        if s:
+            parts.append(f"{attr}={s}")
+    cause = exc.__cause__ or exc.__context__
+    if cause is not None and cause is not exc:
+        parts.append(f"cause={_describe_exc(cause)}")
+    return " | ".join(parts)
+
+
 def _invoke_agent_sdk(
     system_prompt: str, user_prompt: str, files: dict[str, bytes]
 ) -> tuple[str, str]:
     import asyncio
+    import shutil
     import tempfile
     from pathlib import Path
 
     from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore
+
+    # Diagnostic prefix on any failure — proves whether the CLI is even on PATH.
+    claude_bin = shutil.which("claude") or "(claude not on PATH)"
 
     async def _run() -> str:
         with tempfile.TemporaryDirectory() as cwd:
@@ -238,7 +262,11 @@ def _invoke_agent_sdk(
                                 chunks.append(bt)
             return chunks[-1] if chunks else ""
 
-    out = asyncio.run(_run())
+    try:
+        out = asyncio.run(_run())
+    except Exception as exc:
+        msg = f"agent_sdk path failed (claude={claude_bin}) :: {_describe_exc(exc)}"
+        raise RuntimeError(msg) from exc
     transcript = (
         f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_prompt}\n\n"
         f"(files: {sorted(files)})\n\n=== RESPONSE ===\n{out}\n"

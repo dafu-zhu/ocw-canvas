@@ -14,7 +14,10 @@ ENV PATH="/root/.local/bin:${PATH}"
 
 # Claude Code CLI — the Agent SDK shells out to it when CLAUDE_CODE_OAUTH_TOKEN is set.
 # Harmless when the Anthropic-API fallback (ANTHROPIC_API_KEY) is used instead.
-RUN npm install -g @anthropic-ai/claude-code || true
+# Verify the binary lands on PATH at build time so a silent install failure can't reach prod.
+RUN npm install -g @anthropic-ai/claude-code \
+ && which claude \
+ && claude --version
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./

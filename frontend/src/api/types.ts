@@ -89,6 +89,36 @@ export interface Assignment {
   late_value: number | null;
   position: number;
   published: boolean;
+  covers_lecture_from: number | null;
+  covers_lecture_to: number | null;
+}
+
+export interface ScheduleRow {
+  assignment_id: string;
+  title: string;
+  due_at: string;
+  covers_lecture_from: number | null;
+  covers_lecture_to: number | null;
+}
+
+export interface ScheduleResponse {
+  course_id: string;
+  start_date: string;
+  num_lectures: number;
+  lecture_cadence_days: number;
+  homework_cadence_days: number;
+  applied: boolean;
+  activated: boolean;
+  rows: ScheduleRow[];
+}
+
+export interface ScheduleRequest {
+  start_date: string; // "YYYY-MM-DD"
+  lecture_cadence_days?: number;
+  homework_cadence_days?: number;
+  buffer_after_last_lecture_days?: number;
+  apply?: boolean;
+  activate?: boolean;
 }
 
 export interface RubricItem {

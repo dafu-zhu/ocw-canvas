@@ -13,6 +13,7 @@ import { CourseVideosPage } from "./pages/CourseVideosPage";
 import { CoursesListPage } from "./pages/CoursesListPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 
 function Auth({ children }: { children: ReactNode }) {
   return <RequireAuth>{children}</RequireAuth>;
@@ -22,6 +23,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset" element={<ResetPasswordPage />} />
       <Route path="/" element={<Auth><DashboardPage /></Auth>} />
       <Route path="/courses" element={<Auth><CoursesListPage /></Auth>} />
       <Route path="/calendar" element={<Auth><CalendarPage /></Auth>} />

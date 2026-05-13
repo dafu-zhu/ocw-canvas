@@ -7,7 +7,7 @@ from app.auth import get_current_user
 from app.db import get_db
 from app.models import Assignment, Grade, Submission
 from app.schemas.assignment import GradeOut, SubmissionOut
-from app.services import ai_jobs, storage
+from app.services import ai_jobs, notify, storage
 
 router = APIRouter(tags=["submissions"], dependencies=[Depends(get_current_user)])
 
@@ -96,4 +96,5 @@ def manual_grade(
     g = ai_jobs.record_grade(db, sub, a, score=score, feedback_md=feedback_md, graded_by="manual")
     db.commit()
     db.refresh(g)
+    notify.announce_graded(db, sub, a, g)
     return g

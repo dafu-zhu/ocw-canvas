@@ -11,6 +11,11 @@ venv/
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
+
+# SQLite dev databases
+*.db
+*.db-journal
 
 # Env / secrets
 .env

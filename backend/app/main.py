@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    ai,
     assignment_groups,
     assignments,
     auth,
@@ -34,6 +35,7 @@ app.include_router(assignment_groups.router, prefix="/api")
 app.include_router(assignments.router, prefix="/api")
 app.include_router(submissions.router, prefix="/api")
 app.include_router(gradebook.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 
 

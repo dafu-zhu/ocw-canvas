@@ -64,6 +64,11 @@ async def create_submission(
     sub.file_paths = paths
     db.commit()
     db.refresh(sub)
+    # If a solution key already exists, kick off AI grading immediately. The submission is
+    # already saved, so a model failure must never 500 the submit — ai_jobs never raises.
+    if ai_jobs.has_key(db, a):
+        ai_jobs.grade_with_ai(db, sub.id)
+        db.refresh(sub)
     return sub
 
 

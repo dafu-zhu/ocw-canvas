@@ -1,9 +1,10 @@
-# Study Canvas — Design Spec
+# OCW Canvas — Design Spec
 
 **Date:** 2026-05-12
 **Status:** Draft for review
-**Repo:** `study-canvas` (new, public, GitHub)
+**Repo:** `ocw-canvas` (new, public, GitHub)
 **Related prior art:** `education-log` (single-user React+Supabase dashboard; this project reuses its patterns and adds a real backend)
+**UI reference:** real Canvas screenshots live in [`assets/`](assets/) next to this spec — `canvas-grades-page-1.png`, `canvas-grades-page-2.png` (UChicago Canvas, a course Grades page). More section screenshots will be added as they're supplied; the implementation should match Canvas's chrome (dark left rail, maroon-or-course-color top bar, breadcrumb), spacing, and typography closely.
 
 ---
 
@@ -32,8 +33,8 @@ Browser ── React SPA (Vite + TypeScript, Canvas-styled)
    │   fetch() + JWT in httpOnly cookie
    ▼
 FastAPI  (Python 3.12, on Render Web Service — free tier)
-   ├── REST API     courses · modules · module_items · assignments · submissions ·
-   │                grades · announcements · auth · teacher-mode mutations
+   ├── REST API     courses · modules · module_items · assignment_groups · assignments ·
+   │                submissions · grades · announcements · auth · teacher-mode mutations
    ├── AI service   ──►  Anthropic API (Claude)   solution-key generation + grading
    ├── Email service──►  Resend                   graded / deadline-reminder / password-reset emails
    ├── Storage svc  ──►  Supabase Storage          submission uploads, AI-solution PDFs (private bucket, signed URLs)
@@ -111,11 +112,22 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 | text_md | text | for `note` / `header` |
 | published | bool | default true |
 
+### `assignment_group` — Canvas "assignment group" (weight + drop rules)
+| field | type | notes |
+|---|---|---|
+| id | uuid PK | |
+| course_id | uuid FK → course | cascade delete |
+| name | text | `Problem Sets`, `Midterm`, `Final Exam` |
+| weight | numeric | nullable; % of the course grade. If every group in a course has a weight, the course grade is the weighted sum of group percentages; if none do, it's a flat points total. |
+| drop_lowest_n | int | default 0; drop the N lowest-scoring graded assignments in this group before averaging (18.100B drops 1 from Problem Sets) |
+| position | int | order on the Assignments / Grades pages |
+
 ### `assignment`
 | field | type | notes |
 |---|---|---|
 | id | uuid PK | |
 | course_id | uuid FK → course | cascade delete |
+| assignment_group_id | uuid FK → assignment_group | which group it belongs to |
 | title | text | e.g. `Problem Set 3 — Series` |
 | description_md | text | markdown; embeds the link to the source problem-set PDF + any instructions |
 | points_possible | numeric | e.g. `100` |
@@ -126,9 +138,7 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 | official_solution_url | text | nullable; if present, this is the answer key and no AI solution is generated |
 | late_policy | enum `none` `flag_only` `percent_per_day` | default `flag_only` |
 | late_value | numeric | nullable; % per day when `percent_per_day` |
-| group_name | text | nullable; Canvas "assignment group" header (`Problem Sets`, `Exams`) |
-| weight | numeric | nullable; group weight toward course grade (see §3 rollup) |
-| position | int | |
+| position | int | order within its group |
 | published | bool | default true |
 
 ### `ai_solution`
@@ -208,7 +218,8 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 ### Computed (not stored)
 
 - **Assignment current grade** = the `grade` row of the highest `attempt_number` `graded` submission.
-- **Course grade (Grades page)** = if any assignments carry a `weight`, weighted sum of group percentages; otherwise simple `Σ final_score / Σ score_out_of` over graded assignments. Ungraded/missing assignments are shown but excluded from the running total (Canvas's "show what-if" behavior is out of scope). For 18.100B the groups are Problem Sets 50% / Midterm 20% / Final 30%.
+- **Group percentage** = over the group's `graded` assignments, drop the `drop_lowest_n` lowest by percentage, then `Σ final_score / Σ score_out_of` of the rest.
+- **Course grade (Grades page)** = if every `assignment_group` in the course has a `weight`, the weighted sum of group percentages (normalized by the weights of groups that have any graded work, when "calculate based only on graded assignments" is on); otherwise the flat `Σ final_score / Σ score_out_of` over all graded assignments. Ungraded / missing assignments are shown in the table but excluded from the Total (Canvas's editable "what-if" scores are out of scope). For 18.100B: Problem Sets 50% (drop lowest 1) / Midterm 20% / Final Exam 30%.
 - **Dashboard "To Do"** = published assignments with `due_at` in the future and no submission, soonest first; plus unread announcements.
 
 ### Storage (Supabase)
@@ -232,9 +243,9 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 | 5 | `/courses/:id` | **Course Home** | Course-color banner (code, title, term, instructor), rendered `home_page_md` front page, a "Recent activity" feed. Left **course nav rail**: Home · Syllabus · Modules · Assignments · Grades · Video Lectures · Announcements. |
 | 6 | `/courses/:id/syllabus` | **Syllabus** | Rendered syllabus markdown (held in `home_page_md` or a dedicated field) **plus** an auto-built "Course Summary" table listing every assignment with its due date — exactly what Canvas's syllabus page does. |
 | 7 | `/courses/:id/modules` | **Modules** | Collapsible module sections. Each `module_item` is a row with a kind icon: `link`/`video` → opens `external_url` in a new tab; `assignment` → in-app assignment page; `note`/`header` → inline markdown. **This is the home of all course materials, and they all point outward.** |
-| 8a | `/courses/:id/assignments` | **Assignments list** | Grouped by `group_name` (Canvas "assignment groups"), each row: title, due date, points, submission status badge (Not submitted / Submitted / Graded N/M / Late). |
+| 8a | `/courses/:id/assignments` | **Assignments list** | Grouped under `assignment_group` headers (each shows its weight), each row: title, due date, points, submission status badge (Not submitted / Submitted / Graded N/M / Late). |
 | 8b | `/courses/:id/assignments/:aid` | **Assignment detail** | Rendered `description_md` (with the source-PDF link), due date, points, late policy. **Submit panel:** drag-drop file zone (PDF/images) + optional text/LaTeX box → creates a `submission`. Submission history list. After grading: score + late penalty + rubric breakdown table + AI `feedback_md`, and a "View reference solution" toggle showing the official link if present, else the rendered `ai_solution.content_md`. If the AI solution is still `generating` / `failed`, show status + a "Retry" button (teacher mode). |
-| 9 | `/courses/:id/grades` | **Grades** | Gradebook table: assignment · group · due · status · score · out of · % ; running course total (weighted per §3) pinned at the top. |
+| 9 | `/courses/:id/grades` | **Grades** | Match the Canvas student-grades layout in `assets/canvas-grades-page-*.png`. Page title "Grades for &lt;name&gt;". A toolbar: a **Course** dropdown (just the one course here), an **Arrange By** dropdown (`Due Date` / `Module` / `Assignment Group`) + **Apply** button, and a **Print Grades** button (`window.print()`). A single **Assignments** tab (Canvas's "Learning Mastery" tab is omitted — out of scope). Then the gradebook table with columns: **Name** (assignment title; the assignment-group name as a small grey subtitle line; clicking the title goes to the assignment), **Due** (e.g. `Apr 2 by 11:59pm`), **Submitted** (timestamp of the latest submission, or blank), **Status** (a red `missing` pill when past due with no submission; `late` pill when late; otherwise blank), **Score** (`92 / 100`; a struck-through-eye icon + `/ 100` when not yet graded), and trailing icons per row: a rubric/details icon (opens the rubric breakdown inline) and, if the AI left feedback, a comment-bubble icon with a count (opens `feedback_md`). Group subtotal rows at the bottom (`Homework  100%  400.00 / 400.00`, `Final Exam  N/A  0.00 / 0.00`, …) and a bold **Total** row with the overall percentage. Right sidebar: **Total: NN%** at top, a **Show All Details** toggle (expands every row's rubric+feedback), an **"Assignments are weighted by group:"** mini-table (Group / Weight + a Total 100% row), a **"Calculate based only on graded assignments"** checkbox (default checked — ungraded rows excluded from Total), and Canvas's standard explanatory blurb about what-if scores. Running total uses the §3 rollup; "drop lowest" applies within a group when configured (Problem Sets for 18.100B). |
 | 10 | `/courses/:id/videos` | **Video Lectures** | List/grid of lecture entries (number, title, optional thumbnail) each linking to the external video. Backed by `module_item kind=video` across the course (or a `video` filter). |
 
 **Teacher mode:** a toggle in the Account menu. When on, `+`/edit/delete affordances appear on courses, modules, module items, and assignments; clicking opens a modal (same plain-form style as education-log — required fields marked `*`, no multi-step wizards). Off by default so day-to-day use is pure "student".
@@ -263,7 +274,7 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 ## 6. Repo & Deployment
 
 ```
-study-canvas/                         (new git repo · public · MIT license)
+ocw-canvas/                           (new git repo · public · MIT license)
   backend/
     pyproject.toml                    uv-managed deps; ruff config
     app/
@@ -297,7 +308,8 @@ study-canvas/                         (new git repo · public · MIT license)
   seed/
     seed_template_course.py           creates the 18.100B course + modules + items + assignments
   docs/superpowers/
-    specs/2026-05-12-study-canvas-design.md   (this file)
+    specs/2026-05-12-ocw-canvas-design.md     (this file)
+    specs/assets/                     Canvas UI reference screenshots
     plans/                            implementation plan goes here
   README.md                           one-time setup: Supabase project, Render services,
                                       env vars, alembic upgrade, seed command, owner password
@@ -357,13 +369,15 @@ Source: <https://ocw.mit.edu/courses/18-100b-real-analysis-spring-2025/>
 - *Unit 1 — The Real Numbers* (Lectures 1–3): real numbers, how to write a proof, Archimedean property. Readings §1.1–1.7.
 - *Unit 2 — Sequences & Series* (Lectures 4–9): convergence, monotone & Cauchy convergence theorems, Bolzano–Weierstrass, series & convergence tests, power series, limsup/liminf. Readings ch. 2–3, §10.2.
 - *Unit 3 — Continuity & Metric Spaces* (Lectures 9–14): continuous functions, exponential function, EVT/IVT, metric spaces, open/closed sets, compactness, sequential compactness. Readings §5.x, ch. 13.
-- *Midterm* (review session + exam): the midterm PDF as an `assignment` (`group_name=Exams`, weight 20), the review-session video as a `module_item`.
+- *Midterm* (review session + exam): the midterm PDF as an `assignment` in the `Midterm` group, the review-session video as a `module_item`.
 - *Unit 4 — Differentiation* (Lectures 15–17): derivatives, differentiation laws, Rolle/MVT/L'Hôpital, Taylor expansion & remainder. Readings §7.x.
 - *Unit 5 — Riemann Integration* (Lectures 17–19): Riemann integrals, integrable functions, Fundamental Theorem of Calculus. Readings §8.3, §8.6.
 - *Unit 6 — Sequences of Functions & ODEs* (Lectures 20–23): pointwise vs uniform convergence, integrals/derivatives under uniform convergence, differentiating/integrating power series, Picard–Lindelöf existence & uniqueness. Readings §9.x, §13.11.4.
-- *Final Exam* (review session + exam): the final PDF as an `assignment` (`group_name=Exams`, weight 30), the review-session video as a `module_item`.
+- *Final Exam* (review session + exam): the final PDF as an `assignment` in the `Final Exam` group, the review-session video as a `module_item`.
 
-**Assignments** — the 10 problem sets, each: title `Problem Set k — <topic>`, `description_md` containing the link to that problem set's OCW PDF, `points_possible=100`, `group_name=Problem Sets` (weight 50, lowest dropped), `due_at` left null (or filled from a notional schedule when you start the course), `accepts_files=true`, `accepts_text=true`, `official_solution_url` left empty (OCW 18.100B does not publish PS solutions) → so the **AI generates the reference solution** for each. Plus the **Midterm** and **Final** as `Exams`-group assignments linking the exam PDFs. (Exam files: include if present on the OCW page; otherwise just the two problem-set-style assignments and the review videos.)
+**Assignment groups:** `Problem Sets` (weight 50, `drop_lowest_n=1`), `Midterm` (weight 20), `Final Exam` (weight 30).
+
+**Assignments** — the 10 problem sets, each: title `Problem Set k — <topic>`, `description_md` containing the link to that problem set's OCW PDF, `points_possible=100`, group `Problem Sets`, `due_at` left null (or filled from a notional schedule when you start the course), `accepts_files=true`, `accepts_text=true`, `official_solution_url` left empty (OCW 18.100B does not publish PS solutions) → so the **AI generates the reference solution** for each. Plus the **Midterm** (group `Midterm`) and **Final Exam** (group `Final Exam`) as assignments linking the exam PDFs. (Exam files: include if present on the OCW page; otherwise just the two exam-style assignments and the review-session videos.)
 
 **Video Lectures** — all 23 lecture videos (+ the 2 review sessions) as `module_item kind=video` rows under their units, surfaced together on the Video Lectures page, each linking the corresponding OCW video page.
 
@@ -373,8 +387,7 @@ After 18.100B is in, the other courses from the brief (Linear Algebra → MIT 18
 
 ## 10. Open Operational Questions (resolve during implementation, not now)
 
-- Repo name `study-canvas` — fine to rename (`ocw-canvas`, `selfstudy-lms`, …) before the first push.
-- Custom domain vs `dafu-zhu.github.io/study-canvas/` for the frontend — defer until deployed.
+- Custom domain vs `dafu-zhu.github.io/ocw-canvas/` for the frontend — defer until deployed.
 - Resend sender: onboarding domain initially vs verifying a custom domain — start with whatever Resend allows fastest; revisit if deliverability matters.
 - Rendering AI solutions to PDF (Storage) vs just showing the markdown in-app — start with in-app markdown; add the PDF render only if it feels needed.
 - Whether to keep `app_user` as a table or hold the owner credential purely in env — leaning table (makes password reset clean); decide at P1.

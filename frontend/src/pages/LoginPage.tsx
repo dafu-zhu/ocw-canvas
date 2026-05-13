@@ -3,27 +3,7 @@ import type { FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-
-function Mark({ size = 28 }: { size?: number }) {
-  // A small ringed/asterisk logo, in the spirit of Canvas's wordmark glyph.
-  const r = size / 2 - 2;
-  const cx = size / 2;
-  const cy = size / 2;
-  const ticks = Array.from({ length: 8 }, (_, i) => {
-    const a = (i * Math.PI) / 4;
-    const x1 = cx + Math.cos(a) * (r - 4);
-    const y1 = cy + Math.sin(a) * (r - 4);
-    const x2 = cx + Math.cos(a) * r;
-    const y2 = cy + Math.sin(a) * r;
-    return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="1.5" />;
-  });
-  return (
-    <svg className="glyph" viewBox={`0 0 ${size} ${size}`} aria-hidden>
-      <circle cx={cx} cy={cy} r={r - 6} fill="none" stroke="currentColor" strokeWidth="1.5" />
-      {ticks}
-    </svg>
-  );
-}
+import { BrandMark } from "../components/Brand";
 
 export function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -60,7 +40,7 @@ export function LoginPage() {
   return (
     <div className="login-wrap">
       <div className="login-mark">
-        <Mark />
+        <BrandMark />
         OCW CANVAS
       </div>
 
@@ -154,7 +134,7 @@ export function LoginPage() {
           </a>
         </span>
         <div className="brand-mark">
-          <Mark size={16} />
+          <BrandMark size={16} />
           OCW CANVAS
         </div>
       </div>

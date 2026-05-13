@@ -157,7 +157,7 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 | source | enum `me` `ai_demo` | always `me` in v1; `ai_demo` reserved for a future "let AI do this one" |
 | status | enum `submitted` `grading` `graded` `grading_failed` | |
 
-### `grade` — 1:1 with the latest graded `submission`
+### `grade` — 1:1 with a `submission` (one grade row per graded attempt; "current grade" = the highest-attempt one)
 | field | type | notes |
 |---|---|---|
 | id | uuid PK | |

@@ -116,19 +116,24 @@ LECTURES: list[tuple[int, str]] = [
     (23, "Picard–Lindelöf: existence & uniqueness for ODEs"),
 ]
 
-# 10 problem sets — topic per the unit progression.
-PROBLEM_SETS: list[tuple[int, str]] = [
-    (1, "The real numbers & writing proofs"),
-    (2, "Sequences & convergence"),
-    (3, "Cauchy sequences; Bolzano–Weierstrass"),
-    (4, "Series & convergence tests"),
-    (5, "Power series; limsup/liminf"),
-    (6, "Continuity; EVT/IVT"),
-    (7, "Metric spaces; compactness"),
-    (8, "Differentiation; the mean value theorem"),
-    (9, "Riemann integration & the FTC"),
-    (10, "Sequences of functions; uniform convergence; ODEs"),
+# 10 problem sets — (number, topic, covers_lecture_from, covers_lecture_to).
+# Coverage is used by the scheduler to set "deadline = day before next non-covered lecture".
+PROBLEM_SETS: list[tuple[int, str, int, int]] = [
+    (1,  "The real numbers & writing proofs",                1,  2),
+    (2,  "Sequences & convergence",                          3,  4),
+    (3,  "Cauchy sequences; Bolzano–Weierstrass",            5,  7),
+    (4,  "Series & convergence tests",                        8,  9),
+    (5,  "Power series; limsup/liminf",                      10, 11),
+    (6,  "Continuity; EVT/IVT",                              12, 14),
+    (7,  "Metric spaces; compactness",                       15, 16),
+    (8,  "Differentiation; the mean value theorem",          17, 19),
+    (9,  "Riemann integration & the FTC",                    20, 21),
+    (10, "Sequences of functions; uniform convergence; ODEs", 22, 23),
 ]
+# Midterm: covers lec 1..11 (review session is between lec 11 and 12).
+# Final Exam: covers lec 1..23 (everything).
+MIDTERM_COVERS_TO = 11
+FINAL_COVERS_TO = 23
 
 SYLLABUS_MD = """## Prerequisites
 18.02 Multivariable Calculus.
@@ -344,7 +349,7 @@ def seed(db: Session, force: bool = False) -> Course:
     db.flush()
 
     by_name: dict[str, Assignment] = {}
-    for k, topic in PROBLEM_SETS:
+    for k, topic, lec_from, lec_to in PROBLEM_SETS:
         a = Assignment(
             course_id=course.id,
             assignment_group_id=g_ps.id,
@@ -355,6 +360,8 @@ def seed(db: Session, force: bool = False) -> Course:
             accepts_text=True,
             position=k - 1,
             published=True,
+            covers_lecture_from=lec_from,
+            covers_lecture_to=lec_to,
         )
         db.add(a)
         by_name[a.title] = a
@@ -368,6 +375,8 @@ def seed(db: Session, force: bool = False) -> Course:
         accepts_text=True,
         position=0,
         published=True,
+        covers_lecture_from=1,
+        covers_lecture_to=MIDTERM_COVERS_TO,
     )
     fin = Assignment(
         course_id=course.id,
@@ -379,6 +388,8 @@ def seed(db: Session, force: bool = False) -> Course:
         accepts_text=True,
         position=0,
         published=True,
+        covers_lecture_from=1,
+        covers_lecture_to=FINAL_COVERS_TO,
     )
     db.add_all([mid, fin])
     by_name["Midterm Exam"] = mid
@@ -494,9 +505,10 @@ def update_urls(db: Session) -> dict:
                 it.external_url = new_url
                 counts["items_updated"] += 1
 
-    # 2) Assignment description_md: regenerate per the templates.
+    # 2) Assignment description_md + lecture-coverage: regenerate per the templates.
     by_title = {a.title: a for a in course.assignments}
-    for k, topic in PROBLEM_SETS:
+    counts["coverage_updated"] = 0
+    for k, topic, lec_from, lec_to in PROBLEM_SETS:
         title = f"Problem Set {k} — {topic}"
         a = by_title.get(title)
         if a is None:
@@ -510,6 +522,18 @@ def update_urls(db: Session) -> dict:
             if a.description_md != new_desc:
                 a.description_md = new_desc
                 counts["assignments_updated"] += 1
+            if a.covers_lecture_from != lec_from or a.covers_lecture_to != lec_to:
+                a.covers_lecture_from = lec_from
+                a.covers_lecture_to = lec_to
+                counts["coverage_updated"] += 1
+
+    # Midterm / Final coverage
+    for title, cov_to in (("Midterm Exam", MIDTERM_COVERS_TO), ("Final Exam", FINAL_COVERS_TO)):
+        a = by_title.get(title)
+        if a is not None and (a.covers_lecture_from != 1 or a.covers_lecture_to != cov_to):
+            a.covers_lecture_from = 1
+            a.covers_lecture_to = cov_to
+            counts["coverage_updated"] += 1
 
     _mid_desc = _midterm_description()
     _fin_desc = _final_description()

@@ -13,6 +13,7 @@ from app.api import (
     gradebook,
     module_items,
     modules,
+    schedule,
     submissions,
 )
 from app.config import get_settings
@@ -40,6 +41,7 @@ app.include_router(gradebook.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(announcements.router, prefix="/api")
 app.include_router(cron.router, prefix="/api")
+app.include_router(schedule.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 
 

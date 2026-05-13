@@ -55,6 +55,10 @@ class Assignment(Base, TimestampMixin):
     late_value: Mapped[float | None] = mapped_column(Numeric(6, 3), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Scheduling: which lectures this assignment "closes the door on". Used by the
+    # course-schedule generator to compute due_at as "day before the next non-covered lecture".
+    covers_lecture_from: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    covers_lecture_to: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
     group: Mapped["AssignmentGroup | None"] = relationship(back_populates="assignments")

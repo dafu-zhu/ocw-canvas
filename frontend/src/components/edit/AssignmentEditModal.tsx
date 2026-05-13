@@ -42,6 +42,12 @@ export function AssignmentEditModal({
   );
   const [position, setPosition] = useState(assignment?.position ?? nextPosition);
   const [published, setPublished] = useState(assignment?.published ?? true);
+  const [coversFrom, setCoversFrom] = useState<string>(
+    assignment?.covers_lecture_from != null ? String(assignment.covers_lecture_from) : "",
+  );
+  const [coversTo, setCoversTo] = useState<string>(
+    assignment?.covers_lecture_to != null ? String(assignment.covers_lecture_to) : "",
+  );
 
   async function save() {
     const payload = {
@@ -57,6 +63,8 @@ export function AssignmentEditModal({
       late_value: lateValue === "" ? null : Number(lateValue),
       position,
       published,
+      covers_lecture_from: coversFrom === "" ? null : Number(coversFrom),
+      covers_lecture_to: coversTo === "" ? null : Number(coversTo),
     };
     if (assignment) await api.updateAssignment(assignment.id, payload);
     else await api.createAssignment(courseId, payload);
@@ -150,6 +158,29 @@ export function AssignmentEditModal({
       )}
       <label>Position</label>
       <input type="number" value={position} onChange={(e) => setPosition(Number(e.target.value))} />
+      <label>Lecture coverage (used by the schedule generator)</label>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+        Range of lectures this assignment depends on. Deadline lands the day before lecture
+        (covers_to + 1). Leave blank to fall back to the homework cadence.
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="number"
+          min={1}
+          placeholder="from"
+          value={coversFrom}
+          onChange={(e) => setCoversFrom(e.target.value)}
+          style={{ width: 100 }}
+        />
+        <input
+          type="number"
+          min={1}
+          placeholder="to"
+          value={coversTo}
+          onChange={(e) => setCoversTo(e.target.value)}
+          style={{ width: 100 }}
+        />
+      </div>
       <label>
         <input
           type="checkbox"

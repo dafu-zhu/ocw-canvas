@@ -18,6 +18,8 @@ class AssignmentBase(ORMModel):
     late_value: float | None = None
     position: int = 0
     published: bool = True
+    covers_lecture_from: int | None = None
+    covers_lecture_to: int | None = None
 
 
 class AssignmentCreate(AssignmentBase):

@@ -10,6 +10,8 @@ import type {
   Gradebook,
   Module,
   ModuleItem,
+  ScheduleRequest,
+  ScheduleResponse,
   SolutionInfo,
   Submission,
   User,
@@ -138,4 +140,8 @@ export const api = {
       "POST",
       `/announcements/mark-all-read${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
     ),
+
+  // scheduling
+  scheduleCourse: (courseId: string, body: ScheduleRequest) =>
+    req<ScheduleResponse>("POST", `/courses/${courseId}/schedule`, body),
 };

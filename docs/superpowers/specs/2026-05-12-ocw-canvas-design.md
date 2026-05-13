@@ -4,7 +4,7 @@
 **Status:** Draft for review
 **Repo:** `ocw-canvas` (new, public, GitHub)
 **Related prior art:** `education-log` (single-user React+Supabase dashboard; this project reuses its patterns and adds a real backend)
-**UI reference:** real Canvas screenshots live in [`assets/`](assets/) next to this spec — `canvas-grades-page-1.png`, `canvas-grades-page-2.png` (UChicago Canvas, a course Grades page). More section screenshots will be added as they're supplied; the implementation should match Canvas's chrome (dark left rail, maroon-or-course-color top bar, breadcrumb), spacing, and typography closely.
+**UI reference:** real Canvas screenshots (UChicago Canvas) live in [`assets/`](assets/) next to this spec and are the visual source of truth — `canvas-dashboard.png`, `canvas-course-home-syllabus.png`, `canvas-modules-1/2/3.png`, `canvas-assignments-list-1/2.png`, `canvas-assignment-detail.png`, `canvas-grades-page-1/2.png`, `canvas-announcements.png`. The implementation should match Canvas's chrome (dark narrow left icon rail, breadcrumb bar, course-nav rail), spacing, fonts, and colors closely; where prose here disagrees with a screenshot, the screenshot wins.
 
 ---
 
@@ -83,7 +83,8 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 | instructor | text | `Prof. Tobias Holck Colding` |
 | external_home_url | text | the OCW (or other) course landing page |
 | textbook | text | free text, e.g. `Thomson/Bruckner/Bruckner, Elementary Real Analysis 2e (free PDF); Rudin, PMA 3e (secondary)` |
-| home_page_md | text | the course "front page" markdown (intro + jump links) |
+| home_page_md | text | the course "front page" markdown (intro + jump links) — shown on the Home page |
+| syllabus_md | text | the syllabus body markdown — shown on the Syllabus page (above the auto Course Summary table) |
 | description | text | short blurb for the course card |
 | color | text | hex; the Canvas course-card accent |
 | status | enum `active` `completed` `planned` | drives card placement / styling |
@@ -232,27 +233,70 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 
 ## 4. Pages (Canvas look & feel)
 
-**Global chrome:** dark slate left rail with stacked icon buttons — Dashboard, Courses, Calendar, Inbox (Announcements), Account — plus a top breadcrumb bar. White content area, generous spacing, Canvas-ish typography (system sans, ~14px base), course-color accents on banners and cards. Unread-announcement count badges the Inbox icon.
+The screenshots in `assets/canvas-*.png` are the visual source of truth — match Canvas's chrome, spacing, fonts, and colors closely. Where this section and a screenshot disagree, the screenshot wins.
 
-| # | Route | Page | Notes |
-|---|---|---|---|
-| 1 | `/login` | **Login** | email + password card; "Forgot password?" → email reset link (Resend) → `/reset?token=…` set-new-password page. No public signup. |
-| 2 | `/` | **Dashboard** | Course-card grid (color header bar + `CODE` + title + "next due" pill). Right sidebar: "To Do" (upcoming due dates across courses) + "Recent" (latest announcements). Mirrors Canvas's card dashboard. |
-| 3 | `/calendar` | **Calendar** | Month grid; assignment due dates rendered as course-colored chips. Month view only in v1. |
-| 4 | `/announcements` | **Announcements / Inbox** | Reverse-chron list of all announcements; click → read view (marks `read_at`); per-course filter. This is the in-app mirror of the emails. |
-| 5 | `/courses/:id` | **Course Home** | Course-color banner (code, title, term, instructor), rendered `home_page_md` front page, a "Recent activity" feed. Left **course nav rail**: Home · Syllabus · Modules · Assignments · Grades · Video Lectures · Announcements. |
-| 6 | `/courses/:id/syllabus` | **Syllabus** | Rendered syllabus markdown (held in `home_page_md` or a dedicated field) **plus** an auto-built "Course Summary" table listing every assignment with its due date — exactly what Canvas's syllabus page does. |
-| 7 | `/courses/:id/modules` | **Modules** | Collapsible module sections. Each `module_item` is a row with a kind icon: `link`/`video` → opens `external_url` in a new tab; `assignment` → in-app assignment page; `note`/`header` → inline markdown. **This is the home of all course materials, and they all point outward.** |
-| 8a | `/courses/:id/assignments` | **Assignments list** | Grouped under `assignment_group` headers (each shows its weight), each row: title, due date, points, submission status badge (Not submitted / Submitted / Graded N/M / Late). |
-| 8b | `/courses/:id/assignments/:aid` | **Assignment detail** | Rendered `description_md` (with the source-PDF link), due date, points, late policy. **Submit panel:** drag-drop file zone (PDF/images) + optional text/LaTeX box → creates a `submission`. Submission history list. After grading: score + late penalty + rubric breakdown table + AI `feedback_md`, and a "View reference solution" toggle showing the official link if present, else the rendered `ai_solution.content_md`. If the AI solution is still `generating` / `failed`, show status + a "Retry" button (teacher mode). |
-| 9 | `/courses/:id/grades` | **Grades** | Match the Canvas student-grades layout in `assets/canvas-grades-page-*.png`. Page title "Grades for &lt;name&gt;". A toolbar: a **Course** dropdown (just the one course here), an **Arrange By** dropdown (`Due Date` / `Module` / `Assignment Group`) + **Apply** button, and a **Print Grades** button (`window.print()`). A single **Assignments** tab (Canvas's "Learning Mastery" tab is omitted — out of scope). Then the gradebook table with columns: **Name** (assignment title; the assignment-group name as a small grey subtitle line; clicking the title goes to the assignment), **Due** (e.g. `Apr 2 by 11:59pm`), **Submitted** (timestamp of the latest submission, or blank), **Status** (a red `missing` pill when past due with no submission; `late` pill when late; otherwise blank), **Score** (`92 / 100`; a struck-through-eye icon + `/ 100` when not yet graded), and trailing icons per row: a rubric/details icon (opens the rubric breakdown inline) and, if the AI left feedback, a comment-bubble icon with a count (opens `feedback_md`). Group subtotal rows at the bottom (`Homework  100%  400.00 / 400.00`, `Final Exam  N/A  0.00 / 0.00`, …) and a bold **Total** row with the overall percentage. Right sidebar: **Total: NN%** at top, a **Show All Details** toggle (expands every row's rubric+feedback), an **"Assignments are weighted by group:"** mini-table (Group / Weight + a Total 100% row), a **"Calculate based only on graded assignments"** checkbox (default checked — ungraded rows excluded from Total), and Canvas's standard explanatory blurb about what-if scores. Running total uses the §3 rollup; "drop lowest" applies within a group when configured (Problem Sets for 18.100B). |
-| 10 | `/courses/:id/videos` | **Video Lectures** | List/grid of lecture entries (number, title, optional thumbnail) each linking to the external video. Backed by `module_item kind=video` across the course (or a `video` filter). |
+**Global chrome** (every authenticated page): a fixed **dark, narrow left rail** of stacked icon+label buttons — a small institution crest block at the very top (we use a generic "OCW" mark), then **Account · Dashboard · Courses · Calendar · Inbox · History · Help**; the active item is highlighted. (Some of these are thin in v1 — see below.) To its right, a thin **top breadcrumb bar** (`Course Name › Section › Subsection`, links in blue). Content area is white with generous padding. A small grey term label (e.g. `2026.02` in Canvas; we'd show the course term) sits just above the per-course nav. Body type ≈ 14-15px system sans; headings a larger lighter weight. Course-color accents on course-card header bands and the course banner. The unread-announcement count badges the Inbox icon. **Not replicated:** Canvas's "Ally" score circles ("S"/"A" badges) on items — those are an external integration, skip them.
 
-**Teacher mode:** a toggle in the Account menu. When on, `+`/edit/delete affordances appear on courses, modules, module items, and assignments; clicking opens a modal (same plain-form style as education-log — required fields marked `*`, no multi-step wizards). Off by default so day-to-day use is pure "student".
+**Left-rail items in v1:** Dashboard, Courses, Calendar, Inbox (= Announcements), Account (menu: display name, "Teacher mode" toggle, Log out). `History` and `Help` are decorative/optional (can be omitted or stubbed). Below the rail there's the collapse arrow Canvas shows — optional.
+
+### 1. Login — `/login` (public)
+Centered card: email + password → `POST /auth/login` (sets the JWT cookie). "Forgot password?" → enter email → emailed reset link → `/reset?token=…` set-new-password page → submit → logged in. No public signup; the one account is provisioned by `manage.py create-owner`.
+
+### 2. Dashboard — `/` (`canvas-dashboard.png`)
+Header: large **"Dashboard"** title (+ a `⋮` options menu), and the institution wordmark top-right. Below: a **3-column grid of course cards**, ordered by `display_order`. Each card = a **colored header band** (the course `color`; optionally a background image later — not v1), a `⋮` menu in the band's corner, then in the white lower half: the **course title** as a blue link (`code (term) title`), a greyer **nickname/subtitle** line, the **term label**, and a **footer row of small icons** linking into that course — Announcements (bullhorn, with a red unread-count badge when >0), Modules (folder), Assignments (pencil), Grades. **Right sidebar:** a **"To Do"** list — each entry has a type icon (assignment pencil / announcement bullhorn / calendar event), the title as a link, the course name, the due date/time, and for assignments `"<N> points | <due>"`, plus an `✕` to dismiss; a **"Show All"** link at the bottom. Below To Do, a **"Recent Feedback"** section (recently graded assignments with their score). Empty state: "Add your first course" (teacher mode shows a `+` card).
+
+### 3. Calendar — `/calendar`
+Month grid; each assignment `due_at` appears as a course-colored chip on its day; today highlighted; click a chip → the assignment. Month view only in v1 (no week/agenda views). This is the same mini-calendar shown in the course-home sidebar, full-size.
+
+### 4. Announcements / Inbox — `/announcements` and `/courses/:id/announcements` (`canvas-announcements.png`)
+A filter dropdown (`All` / per-course), a search box, a **"Mark All as Read"** button. Then a reverse-chron list of `announcement` rows: a round avatar with initials (the "instructor" — we use a fixed AI/system avatar), the **title** (bold), `body_md` preview text (truncated), and **"Posted on: <date>"** on the right; unread rows get a small dot. Click → full announcement view (renders `body_md`, marks `read_at`, links to the related assignment if any). The course-scoped version filters to one course. Low-priority surface — the *email* is the primary delivery; this page just mirrors them.
+
+### 5. Course Home — `/courses/:id` (`canvas-course-home-syllabus.png`)
+Course banner area (code · title · term · instructor). Body: the rendered `home_page_md` "front page" (intro + jump links). Left **course-nav rail** below the term label: **Home · Syllabus · Modules · Assignments · Grades · Video Lectures · Announcements** (active item bolded with a left accent bar). **Right sidebar:** buttons **"View Course Stream" · "View Course Calendar" · "View Course Notifications"** (these can be light: Stream → recent activity list, Calendar → the calendar filtered to this course, Notifications → noop/stub in v1), then a **"To Do"** list scoped to this course, then a **mini month calendar** with today highlighted and **deadline days highlighted** (clicking a day jumps the calendar). (Per the user: course home "has a calendar, has events (deadlines)" — that's this mini-calendar.)
+
+### 6. Syllabus — `/courses/:id/syllabus` (same `canvas-course-home-syllabus.png`)
+Top: a **"Recent Announcements"** block (the latest few, collapsible). Then the **syllabus body** (rendered markdown — held in a `course.syllabus_md` field; for 18.100B: prerequisites, textbooks, the 50/20/30 grading split, problem-set & exam policies). Then an auto-built **"Course Summary"** table — every assignment with its due date and points, sorted by date — exactly what Canvas generates. Same right sidebar as Course Home (Stream/Calendar/Notifications buttons, To Do, mini calendar). A "Jump to Today" link anchors the summary table to the current date.
+
+### 7. Modules — `/courses/:id/modules` (`canvas-modules-1/2/3.png`)
+Top-right buttons: **"Collapse All"** (toggles all modules) and **"Export Course Content"** (decorative/optional in v1 — or a JSON dump). Then a stack of **module sections**, each a **light-grey header bar** with a collapse triangle + the module `title` (e.g. `Direct links`, `Midterm Exam`, `Optional reading`, `Lecture 1`, …). Inside each, **module-item rows** (white, hairline-separated), each = a **kind icon** + the item title:
+- `link` → chain-link icon, **blue** title, a small **external-link arrow** after it; opens `external_url` in a new tab.
+- `video` → same as `link` (chain-link/external-arrow), used for lecture-video pages.
+- `note` (a "page") → document icon, **dark** title; clicking expands/opens the rendered `text_md` inline (or a simple page view).
+- `header` → rendered as a sub-heading row inside the module (no icon, or a small marker), `indent`-able.
+- `assignment` → assignment/pencil icon, **dark** title, with a small subtitle line `"<due date>  ·  <points> pts"`; clicking goes to the in-app assignment page.
+
+`indent` (0–2) nests rows visually. **This is where all course materials live, and every `link`/`video` points outward to the university's real page — nothing is re-hosted.** Teacher mode adds: `+ Module`, `+ Item` (per module), drag-to-reorder, edit/delete, publish toggles.
+
+### 8a. Assignments list — `/courses/:id/assignments` (`canvas-assignments-list-1/2.png`)
+A search box; a **"SHOW BY DATE" / "SHOW BY TYPE"** toggle (the active one filled). **By date:** grey-header groups in order **Overdue Assignments · Upcoming Assignments · Undated Assignments · Past Assignments** (an assignment past `available_at`-window or with submissions disabled shows a `Closed` prefix). **By type:** grouped under `assignment_group` headers (each showing its weight). Each row: assignment/pencil icon, **title** (bold link), and a subtitle `"Due <date> at <time>  |  <score-or-–>/<points> pts  |  <Not Yet Graded?>"` — `–/100 pts` = not yet graded/submitted, `100/100 pts` = graded. Teacher mode: `+ Assignment`, edit/delete, and per-row "Generate solution" / "Re-grade" actions.
+
+### 8b. Assignment detail — `/courses/:id/assignments/:aid` (`canvas-assignment-detail.png`)
+Header: assignment **title**; subtitle **"Due: &lt;full date&gt;"**; **"&lt;N&gt; Points Possible"** large, top-right; an **"Add Comment"** button top-right (attaches a note to the current attempt). Below the title: an **"Attempt N" dropdown** (switch between submission attempts) next to a small status ring — `In Progress — NEXT UP: Submit Assignment` before you submit, `Submitted` / `Graded` after; **"Unlimited Attempts Allowed"** text (resubmission is allowed). A **"Details"** collapsible block renders `description_md` (which embeds the link to the source problem-set PDF). Then **"Choose a submission type"** — **Text** (a text/LaTeX entry box), **Upload** (a drag-drop file zone: "Drag a file here, or Choose a file to upload", plus "Webcam Photo" — optional — and a files picker), and **More** (extra types — none in v1). A sticky bottom-right **"Submit Assignment"** button creates the `submission` and kicks off grading.
+
+After grading, the page also shows (in the right column / below): the **score** (`final_score / points_possible`, with the late penalty broken out if any), the **rubric breakdown** table (`criterion · awarded / possible · note`), the AI's **`feedback_md`**, any attempt comments, and a **"View reference solution"** toggle → the `official_solution_url` link if set, else the rendered `ai_solution.content_md`. If `ai_solution.status` is `generating`/`failed`, show that state and (teacher mode) a **"Retry"** button. The "Attempt N" dropdown lets you view the grade for each past attempt.
+
+### 9. Grades — `/courses/:id/grades` (`canvas-grades-page-1/2.png`)
+Match the screenshots. Page title **"Grades for &lt;name&gt;"**; top-right a **"Print Grades"** button (`window.print()`). Toolbar: a **Course** dropdown (just this course), an **"Arrange By"** dropdown (`Due Date` / `Module` / `Assignment Group`) + an **Apply** button. A single **"Assignments"** tab (Canvas's "Learning Mastery" tab is out of scope). Then the **gradebook table**:
+
+| column | content |
+|---|---|
+| **Name** | assignment title (link → assignment); the `assignment_group` name as a small grey subtitle |
+| **Due** | `Apr 2 by 11:59pm` (blank if undated) |
+| **Submitted** | timestamp of the latest submission, or blank |
+| **Status** | a red `missing` pill when past due with no submission; a `late` pill when the submission is late; otherwise blank |
+| **Score** | `92 / 100`; a struck-through-eye icon + `/ 100` when not yet graded |
+| (trailing) | a rubric/details icon (expands the rubric breakdown inline) and, when the AI left feedback, a comment-bubble icon with a count (expands `feedback_md`) |
+
+Below the rows: per-`assignment_group` **subtotal rows** (`Homework   100%   400.00 / 400.00`, `Final Exam   N/A   0.00 / 0.00`, …) then a bold **Total** row with the overall percentage. **Right sidebar:** **"Total: NN%"** at top; a **"Show All Details"** toggle (expands every row's rubric + feedback); an **"Assignments are weighted by group:"** mini-table (Group / Weight rows + a `Total 100%` row); a **"Calculate based only on graded assignments"** checkbox (default checked — ungraded rows excluded from the Total); and Canvas's standard explanatory blurb about what-if scores (we keep the text but the what-if editing itself is out of scope). The Total uses the §3 rollup, including `drop_lowest_n` within a group (Problem Sets for 18.100B).
+
+### 10. Video Lectures — `/courses/:id/videos`
+A list/grid of lecture entries (lecture number, title, optional thumbnail) each linking to the external video page (OCW / YouTube). Backed by the course's `module_item`s with `kind=video`, in module/position order. Just a convenience view over what's already in Modules.
+
+**Teacher mode:** a toggle in the Account menu. When on, `+` / edit / delete / publish / reorder affordances appear on courses, modules, module items, assignment groups, and assignments; clicking opens a plain-form modal (education-log style — required fields marked `*`, no multi-step wizards). Off by default so day-to-day use is pure "student". Also exposes the per-assignment "Generate solution" and "Re-grade" actions and the AI-job "Retry" buttons.
 
 **Empty states:** no courses → "Add your first course"; course with no modules → "No modules yet"; assignment with no submissions → "You haven't submitted yet."
 
-**Responsive:** content area collapses to single column on narrow screens; the course nav rail becomes a top dropdown. Not a priority — desktop is the primary target.
+**Responsive:** content collapses to a single column on narrow screens; the course-nav rail becomes a top dropdown. Desktop is the primary target — mobile is best-effort.
 
 ---
 

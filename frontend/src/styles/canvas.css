@@ -371,50 +371,165 @@ table.data th {
   font-size: 12px;
 }
 
-/* ---- Login ---- */
+/* ---- Login (mirrors the real Canvas login chrome) ---- */
 .login-wrap {
   min-height: 100vh;
+  background: #394b58;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10vh 16px 24px;
+}
+.login-mark {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: var(--bg);
+  gap: 14px;
+  margin-bottom: 18px;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+}
+.login-mark .glyph {
+  width: 28px;
+  height: 28px;
+  display: inline-block;
 }
 .login-card {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 28px 32px;
-  width: 360px;
-  box-shadow: var(--card-shadow);
+  width: 480px;
+  max-width: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 .login-card h1 {
-  font-weight: 300;
-  font-size: 24px;
-  text-align: center;
-  margin: 0 0 18px;
+  font-weight: 400;
+  font-size: 20px;
+  margin: 0 0 6px;
+  color: #fff;
+}
+.login-card h1.sr-only {
+  /* The login page hides its heading — the wordmark above the form stands in. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 .login-card label {
   display: block;
-  font-size: 13px;
-  margin: 12px 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 16px 0 6px;
+  color: #fff;
 }
-.login-card input {
+.login-card input[type="email"],
+.login-card input[type="password"],
+.login-card input[type="text"] {
   width: 100%;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  height: 42px;
+  padding: 0 10px;
+  background: #fff;
+  color: var(--text);
+  border: none;
+  border-radius: 3px;
+  font-size: 15px;
+}
+.login-card input[type="email"]:focus,
+.login-card input[type="password"]:focus,
+.login-card input[type="text"]:focus {
+  outline: 2px solid #71c4ec;
+  outline-offset: 1px;
+}
+.login-card .check-row {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.login-card .check-row .stay {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #fff;
+  cursor: pointer;
+}
+.login-card .check-row .stay input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: #fff;
+}
+.login-card .btn-canvas {
+  background: transparent;
+  color: #fff;
+  border: 1px solid #fff;
+  border-radius: 3px;
+  padding: 9px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.login-card .btn-canvas:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+.login-card .btn-canvas:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.login-card .forgot,
+.login-card .linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: underline;
+  cursor: pointer;
 }
 .login-card .err {
-  color: #b00020;
+  color: #ffc7c7;
   font-size: 13px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
-.login-card .actions {
-  margin-top: 18px;
+.login-card .info {
+  color: #d6e7ef;
+  font-size: 13px;
+  margin-top: 12px;
+}
+.login-foot {
+  margin-top: 28px;
+  width: 480px;
+  max-width: 100%;
+  text-align: center;
+  color: #fff;
+  font-size: 13px;
+}
+.login-foot a {
+  color: #fff;
+  text-decoration: underline;
+  margin: 0 8px;
+}
+.login-foot .brand-mark {
+  margin-top: 22px;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
   align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0.85;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  font-size: 13px;
+}
+.login-foot .brand-mark svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* ---- Modal ---- */

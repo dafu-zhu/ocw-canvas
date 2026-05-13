@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script>
+      // GitHub Pages SPA redirect: rewrite /ocw-canvas/foo/bar -> /ocw-canvas/?/foo/bar
+      var seg = 1; // number of leading path segments to keep (the repo name)
+      var l = window.location;
+      var keep = l.pathname.split("/").slice(0, 1 + seg).join("/");
+      var rest = l.pathname.slice(keep.length).replace(/^\//, "");
+      l.replace(
+        keep + "/?/" + rest + (l.search ? "&" + l.search.slice(1) : "") + l.hash
+      );
+    </script>
+  </head>
+  <body></body>
+</html>

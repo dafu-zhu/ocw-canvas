@@ -10,6 +10,7 @@ uv sync
 cp .env.example .env          # edit JWT_SECRET; DATABASE_URL defaults to local sqlite
 uv run alembic upgrade head
 uv run python -m app.manage create-owner --email you@example.com --name "Your Name"
+uv run python -m seed.seed_template_course   # loads the MIT 18.100B seed course (idempotent; --force re-creates)
 uv run uvicorn app.main:app --reload --port 8000
 ```
 

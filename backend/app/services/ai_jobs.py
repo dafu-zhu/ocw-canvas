@@ -209,6 +209,9 @@ def grade_with_ai(db: Session, submission_id: str) -> Grade | None:
         )
         db.commit()
         db.refresh(g)
+        from app.services import notify  # local import: notify -> email -> models (no cycle)
+
+        notify.announce_graded(db, sub, a, g)
         return g
     except Exception:  # noqa: BLE001
         sub.status = "grading_failed"

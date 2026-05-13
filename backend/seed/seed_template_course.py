@@ -25,14 +25,26 @@ CODE = "MIT 18.100B"
 OCW = "https://ocw.mit.edu/courses/18-100b-real-analysis-spring-2025"
 HOME = OCW + "/"
 SYLLABUS_PAGE = OCW + "/pages/syllabus/"
+CALENDAR_PAGE = OCW + "/pages/calendar/"
+READINGS_PAGE = OCW + "/pages/readings/"
 VIDEOS = OCW + "/video_galleries/video-lectures/"
 NOTES = OCW + "/pages/lecture-notes/"
-ASSIGNMENTS_PAGE = OCW + "/pages/assignments/"
-EXAMS_PAGE = OCW + "/pages/exams/"
+# OCW's actual slug for this course is "problem-sets"; "assignments" / "exams" do NOT exist
+# (exam papers aren't posted; only review PDFs are, and those live under lecture-notes).
+ASSIGNMENTS_PAGE = OCW + "/pages/problem-sets/"
 
 
 def _res(slug: str) -> str:
     return f"{OCW}/resources/{slug}/"
+
+
+# Per-problem-set PDFs (verified live).
+PROBLEM_SET_URLS: dict[int, str] = {
+    n: _res(f"mit18_100b_s25_pset{n:02d}_pdf") for n in range(1, 11)
+}
+
+# Combined all-lectures-in-one PDF (handy single download).
+ALL_LECTURE_NOTES_PDF = _res("mit18_100b_s25_lec_full_pdf")
 
 
 # Per-lecture video resource URLs (date slugs from the OCW Spring 2025 schedule).
@@ -61,8 +73,15 @@ LECTURE_URLS: dict[int, str] = {
     22: _res("ocw_18100b-lec22-2025may06_mp4"),
     23: _res("ocw_18100b-lec23-2025may08_mp4"),
 }
-MIDTERM_REVIEW_URL = _res("ocw_18100b-midterm-review-2025mar18_mp4")
-FINAL_REVIEW_URL = _res("ocw_18100b-final-exam-review-2025may13_mp4")
+MIDTERM_REVIEW_VIDEO_URL = _res("ocw_18100b-midterm-review-2025mar18_mp4")
+FINAL_REVIEW_VIDEO_URL = _res("ocw_18100b-final-exam-review-2025may13_mp4")
+# Review handouts (PDFs in lecture notes; note word order: "review_midterm", not "midterm_review").
+MIDTERM_REVIEW_PDF_URL = _res("mit18_100b_s25_review_midterm_pdf")
+FINAL_REVIEW_PDF_URL = _res("mit18_100b_s25_review_final_pdf")
+
+# Backwards-compat aliases (some older code paths referenced these names).
+MIDTERM_REVIEW_URL = MIDTERM_REVIEW_VIDEO_URL
+FINAL_REVIEW_URL = FINAL_REVIEW_VIDEO_URL
 
 # Per-lecture lecture-notes PDF resource URLs.
 # OCW pattern: /resources/mit18_100b_s25_lec<NN>_pdf/ (zero-padded).
@@ -153,6 +172,32 @@ TEXTBOOK = (
 )
 
 
+def _ps_description(k: int, topic: str) -> str:
+    url = PROBLEM_SET_URLS[k]
+    return (
+        f"Problem Set {k} ({topic}). Source PDF on MIT OCW: [Problem Set {k} (PDF)]({url}). "
+        "Upload your worked solutions; the AI generates a reference solution and grades against it."
+    )
+
+
+def _midterm_description() -> str:
+    return (
+        "Midterm exam (in-class, 1.5 hours, one page of handwritten notes allowed). "
+        "Exam papers are not posted on OCW for this term; use the review handout to study: "
+        f"[Review for Midterm (PDF)]({MIDTERM_REVIEW_PDF_URL}) · "
+        f"[Review session (video)]({MIDTERM_REVIEW_VIDEO_URL})."
+    )
+
+
+def _final_description() -> str:
+    return (
+        "Final exam (3 hours, one page of handwritten notes allowed). "
+        "Exam papers are not posted on OCW for this term; use the review handout to study: "
+        f"[Review for the Final (PDF)]({FINAL_REVIEW_PDF_URL}) · "
+        f"[Review session (video)]({FINAL_REVIEW_VIDEO_URL})."
+    )
+
+
 def _unit_items(lo: int, hi: int, reading_note: str) -> list[dict]:
     """Video + notes rows for lectures [lo, hi], then a Readings note."""
     items: list[dict] = []
@@ -184,10 +229,16 @@ def _units() -> list[tuple[str, list[dict]]]:
             [
                 {"kind": "link", "title": "18.100B course home (MIT OpenCourseWare)", "url": HOME},
                 {"kind": "link", "title": "Syllabus", "url": SYLLABUS_PAGE},
+                {"kind": "link", "title": "Calendar", "url": CALENDAR_PAGE},
+                {"kind": "link", "title": "Readings", "url": READINGS_PAGE},
                 {"kind": "link", "title": "Lecture notes (all)", "url": NOTES},
+                {
+                    "kind": "link",
+                    "title": "Lecture notes — all-in-one PDF",
+                    "url": ALL_LECTURE_NOTES_PDF,
+                },
                 {"kind": "link", "title": "Video lectures (all)", "url": VIDEOS},
                 {"kind": "link", "title": "Problem sets (all)", "url": ASSIGNMENTS_PAGE},
-                {"kind": "link", "title": "Exams", "url": EXAMS_PAGE},
             ],
         ),
         (
@@ -206,12 +257,16 @@ def _units() -> list[tuple[str, list[dict]]]:
             "Midterm Exam",
             [
                 {
+                    "kind": "link",
+                    "title": "Review for Midterm (PDF)",
+                    "url": MIDTERM_REVIEW_PDF_URL,
+                },
+                {
                     "kind": "video",
                     "title": "Midterm review session (video)",
-                    "url": MIDTERM_REVIEW_URL,
+                    "url": MIDTERM_REVIEW_VIDEO_URL,
                 },
                 {"kind": "assignment", "title": "Midterm Exam", "_assignment": "Midterm Exam"},
-                {"kind": "link", "title": "Exam materials (MIT OCW)", "url": EXAMS_PAGE},
             ],
         ),
         (
@@ -230,12 +285,16 @@ def _units() -> list[tuple[str, list[dict]]]:
             "Final Exam",
             [
                 {
+                    "kind": "link",
+                    "title": "Review for the Final (PDF)",
+                    "url": FINAL_REVIEW_PDF_URL,
+                },
+                {
                     "kind": "video",
                     "title": "Final review session (video)",
-                    "url": FINAL_REVIEW_URL,
+                    "url": FINAL_REVIEW_VIDEO_URL,
                 },
                 {"kind": "assignment", "title": "Final Exam", "_assignment": "Final Exam"},
-                {"kind": "link", "title": "Exam materials (MIT OCW)", "url": EXAMS_PAGE},
             ],
         ),
     ]
@@ -290,11 +349,7 @@ def seed(db: Session, force: bool = False) -> Course:
             course_id=course.id,
             assignment_group_id=g_ps.id,
             title=f"Problem Set {k} — {topic}",
-            description_md=(
-                f"Problem Set {k}. Find this set's PDF on the MIT OCW assignments page: "
-                f"[{ASSIGNMENTS_PAGE}]({ASSIGNMENTS_PAGE}). Upload your worked solutions; the AI "
-                "generates a reference solution and grades against it."
-            ),
+            description_md=_ps_description(k, topic),
             points_possible=100,
             accepts_files=True,
             accepts_text=True,
@@ -303,12 +358,11 @@ def seed(db: Session, force: bool = False) -> Course:
         )
         db.add(a)
         by_name[a.title] = a
-    _exam_link = f"Materials on the MIT OCW exams page: [{EXAMS_PAGE}]({EXAMS_PAGE})."
     mid = Assignment(
         course_id=course.id,
         assignment_group_id=g_mid.id,
         title="Midterm Exam",
-        description_md=f"Midterm exam. {_exam_link}",
+        description_md=_midterm_description(),
         points_possible=100,
         accepts_files=True,
         accepts_text=True,
@@ -319,7 +373,7 @@ def seed(db: Session, force: bool = False) -> Course:
         course_id=course.id,
         assignment_group_id=g_fin.id,
         title="Final Exam",
-        description_md=f"Final exam. {_exam_link}",
+        description_md=_final_description(),
         points_possible=100,
         accepts_files=True,
         accepts_text=True,
@@ -364,34 +418,107 @@ def seed(db: Session, force: bool = False) -> Course:
 
 _LECTURE_VIDEO_RE = re.compile(r"^Lecture (\d+):.*\(video\)\s*$")
 _LECTURE_NOTES_RE = re.compile(r"^Lecture (\d+) notes\s*$")
+_PS_TITLE_RE = re.compile(r"^Problem Set (\d+)(?:\s+—\s+(.*))?$")
+
+# Module-item titles -> their canonical OCW URL. Pure data, easy to extend.
+_ITEM_TITLE_TO_URL: dict[str, str] = {
+    "18.100B course home (MIT OpenCourseWare)": HOME,
+    "Syllabus": SYLLABUS_PAGE,
+    "Calendar": CALENDAR_PAGE,
+    "Readings": READINGS_PAGE,
+    "Lecture notes (all)": NOTES,
+    "Lecture notes — all-in-one PDF": ALL_LECTURE_NOTES_PDF,
+    "Video lectures (all)": VIDEOS,
+    "Problem sets (all)": ASSIGNMENTS_PAGE,
+    "Midterm review session (video)": MIDTERM_REVIEW_VIDEO_URL,
+    "Final review session (video)": FINAL_REVIEW_VIDEO_URL,
+    "Review for Midterm (PDF)": MIDTERM_REVIEW_PDF_URL,
+    "Review for the Final (PDF)": FINAL_REVIEW_PDF_URL,
+}
+
+# Old item titles that are now obsolete (link to a dead OCW path) -> what to do.
+# Each entry: (new_title, new_url) so we rename + relink in one pass. The url for
+# "Exam materials (MIT OCW)" is module-dependent (midterm vs final) and is computed below.
+_OBSOLETE_TITLE_REMAP: dict[str, tuple[str, str]] = {
+    "Exam materials (MIT OCW)": ("Review handout (PDF)", ""),
+    "Exams": ("Lecture notes — all-in-one PDF", ALL_LECTURE_NOTES_PDF),
+}
 
 
 def update_urls(db: Session) -> dict:
-    """Refresh every module_item URL on the live MIT 18.100B course in place — preserves
-    submissions / AI solutions / announcements. Returns counts of what was touched."""
+    """Refresh every URL on the live MIT 18.100B course in place — module-item external_urls
+    AND assignment description_md (so per-PS / Midterm / Final links go to the right OCW
+    resource). Preserves submissions / AI solutions / announcements / grades."""
     course = db.query(Course).filter(Course.code == CODE).first()
     if course is None:
-        return {"course_found": False, "updated": 0, "examined": 0}
-    counts = {"course_found": True, "updated": 0, "examined": 0}
+        return {"course_found": False}
+    counts = {
+        "course_found": True,
+        "items_examined": 0,
+        "items_updated": 0,
+        "items_renamed": 0,
+        "assignments_updated": 0,
+    }
+
+    # 1) Module items: URLs + (occasionally) title fixes for obsolete entries.
     for m in course.modules:
         for it in m.items:
-            counts["examined"] += 1
+            counts["items_examined"] += 1
             new_url: str | None = None
+            new_title: str | None = None
+
             mv = _LECTURE_VIDEO_RE.match(it.title)
             mn = _LECTURE_NOTES_RE.match(it.title)
             if mv:
                 new_url = LECTURE_URLS.get(int(mv.group(1)))
             elif mn:
                 new_url = LECTURE_NOTE_URLS.get(int(mn.group(1)))
-            elif it.title == "Midterm review session (video)":
-                new_url = MIDTERM_REVIEW_URL
-            elif it.title == "Final review session (video)":
-                new_url = FINAL_REVIEW_URL
-            elif it.title == "Video lectures (all)":
-                new_url = VIDEOS
+            elif it.title in _ITEM_TITLE_TO_URL:
+                new_url = _ITEM_TITLE_TO_URL[it.title]
+            elif it.title in _OBSOLETE_TITLE_REMAP:
+                new_title, base_url = _OBSOLETE_TITLE_REMAP[it.title]
+                if it.title == "Exam materials (MIT OCW)":
+                    # Use the right review-PDF URL based on which module this item is in.
+                    new_url = (
+                        MIDTERM_REVIEW_PDF_URL
+                        if "Midterm" in (m.title or "")
+                        else FINAL_REVIEW_PDF_URL
+                    )
+                else:
+                    new_url = base_url
+
+            if new_title and new_title != it.title:
+                it.title = new_title
+                counts["items_renamed"] += 1
             if new_url and new_url != it.external_url:
                 it.external_url = new_url
-                counts["updated"] += 1
+                counts["items_updated"] += 1
+
+    # 2) Assignment description_md: regenerate per the templates.
+    by_title = {a.title: a for a in course.assignments}
+    for k, topic in PROBLEM_SETS:
+        title = f"Problem Set {k} — {topic}"
+        a = by_title.get(title)
+        if a is None:
+            # Fuzzy match: topic suffix might have been edited; match the "Problem Set N" prefix.
+            for at, ax in by_title.items():
+                if _PS_TITLE_RE.match(at) and at.startswith(f"Problem Set {k} "):
+                    a = ax
+                    break
+        if a is not None:
+            new_desc = _ps_description(k, topic)
+            if a.description_md != new_desc:
+                a.description_md = new_desc
+                counts["assignments_updated"] += 1
+
+    _mid_desc = _midterm_description()
+    _fin_desc = _final_description()
+    for title, desc in (("Midterm Exam", _mid_desc), ("Final Exam", _fin_desc)):
+        a = by_title.get(title)
+        if a is not None and a.description_md != desc:
+            a.description_md = desc
+            counts["assignments_updated"] += 1
+
     db.commit()
     return counts
 
@@ -411,10 +538,7 @@ def main() -> None:
     try:
         if args.update_urls:
             counts = update_urls(db)
-            print(
-                f"update_urls: course_found={counts['course_found']} "
-                f"updated={counts['updated']} examined={counts['examined']}"
-            )
+            print("update_urls: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
             return
         c = seed(db, force=args.force)
         n_modules = len(c.modules)

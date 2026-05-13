@@ -9,6 +9,7 @@ from app.models.base import TimestampMixin, _uuid
 
 if TYPE_CHECKING:
     from app.models.course import Course
+    from app.models.submission import Submission
 
 
 class AssignmentGroup(Base, TimestampMixin):
@@ -56,3 +57,8 @@ class Assignment(Base, TimestampMixin):
 
     course: Mapped["Course"] = relationship(back_populates="assignments")
     group: Mapped["AssignmentGroup | None"] = relationship(back_populates="assignments")
+    submissions: Mapped[list["Submission"]] = relationship(
+        back_populates="assignment",
+        cascade="all, delete-orphan",
+        order_by="Submission.attempt_number",
+    )

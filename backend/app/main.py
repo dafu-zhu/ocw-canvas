@@ -7,6 +7,7 @@ from app.api import (
     auth,
     courses,
     files,
+    gradebook,
     module_items,
     modules,
     submissions,
@@ -32,6 +33,7 @@ app.include_router(module_items.router, prefix="/api")
 app.include_router(assignment_groups.router, prefix="/api")
 app.include_router(assignments.router, prefix="/api")
 app.include_router(submissions.router, prefix="/api")
+app.include_router(gradebook.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 
 

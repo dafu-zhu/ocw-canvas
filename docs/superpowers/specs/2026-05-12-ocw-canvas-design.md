@@ -32,12 +32,14 @@ Real multi-user accounts & RBAC; discussion boards; quizzes / auto-graded multip
 Browser ── React SPA (Vite + TypeScript, Canvas-styled)
    │   fetch() + JWT in httpOnly cookie
    ▼
-FastAPI  (Python 3.12, on Render Web Service — free tier)
+FastAPI  (Python 3.12 + Node, on Render Web Service via Docker — free tier)
    ├── REST API     courses · modules · module_items · assignment_groups · assignments ·
    │                submissions · grades · announcements · auth · teacher-mode mutations
-   ├── AI service   ──►  Anthropic API (Claude)   solution-key generation + grading
+   ├── AI service   ──►  Claude Agent SDK (claude-agent-sdk → Claude Code CLI)
+   │                     auth: CLAUDE_CODE_OAUTH_TOKEN  (owner's Claude subscription — no per-token API billing)
+   │                     does: reference-solution generation + submission grading (reads PDFs/images via file access)
    ├── Email service──►  Resend                   graded / deadline-reminder / password-reset emails
-   ├── Storage svc  ──►  Supabase Storage          submission uploads, AI-solution PDFs (private bucket, signed URLs)
+   ├── Storage svc  ──►  Supabase Storage          submission uploads, AI-solution PDFs, prompt transcripts (private buckets, signed URLs)
    └── /cron/tick   ◄──  Render Cron Job (hourly, X-Cron-Secret header)
                          deadline-approaching scan · retry stuck AI jobs · idempotent
 
@@ -47,14 +49,16 @@ Frontend hosting: GitHub Pages (gh-pages branch, built by a GitHub Action) — s
 ```
 
 **Why this shape**
-- The AI/email API keys and the grading logic *cannot* live in a static frontend → there must be a server → FastAPI (matches the user's Python tooling: uv, ruff, pytest).
+- The AI credential, the email key, and the grading logic *cannot* live in a static frontend → there must be a server → FastAPI (matches the user's Python tooling: uv, ruff, pytest).
 - Supabase gives free **persistent** Postgres + Storage with zero DB ops (Render's free Postgres is deleted after 30 days; Supabase's is not).
-- Render gives a free always-reachable Python host and a free Cron Job for the deadline ticks.
+- Render gives a free always-reachable host and a free Cron Job for the deadline ticks. Because the AI path uses the Claude Code CLI under the hood, the Render service is built from a **Dockerfile that installs both Python and Node**.
 - Frontend stays static → free on GitHub Pages, same deploy story as education-log.
 
-**Resolved forks (from brainstorming)**
+**Resolved forks (from brainstorming + follow-ups)**
 - **Auth:** FastAPI-native, single account. No Supabase Auth SDK in the frontend. Email + bcrypt-hashed password (hash in an env var, or in the single `app_user` row), JWT in an httpOnly+SameSite cookie, ~30-day expiry. Password reset = emailed signed token (Resend) → set-new-password page. Rationale: keeps *all* server logic in one place; one fewer SDK in the browser.
 - **Deadline checks:** Render Cron Job hitting `POST /cron/tick` hourly (not an in-process APScheduler). Rationale: survives backend restarts/sleeps, no scheduler state to reason about, trivially testable as a plain endpoint.
+- **AI access — prefer no API billing.** The AI service goes through the **Claude Agent SDK** (`claude-agent-sdk`, which drives the Claude Code CLI), authenticated with a **Claude Code OAuth token** (`CLAUDE_CODE_OAUTH_TOKEN`, produced once by `claude setup-token`) so all model usage is billed to the owner's existing Claude subscription rather than a pay-per-token API key. This is a personal, single-user tool — run it as such; respect the subscription's rate limits. In this mode the AI does both jobs: generating reference solutions (when none is attached) and grading submissions.
+  - **Fallback if the OAuth path can't be used** (token rejected from the Render host, the SDK/CLI won't run there): switch the AI service to the plain **Anthropic API** via `ANTHROPIC_API_KEY`, *and* set `AI_SOLUTION_GENERATION_ENABLED=false`. Now the AI never *generates* reference solutions from scratch (that's the token-expensive part) — instead an assignment must carry a solution key (an `official_solution_url` **or** an uploaded `official_solution_file`) before autograding runs; submitting against a key-less assignment just records the submission and shows "awaiting solution key". The API key *is* used for the **grading + comments** step against the provided key — which is **much smaller token consumption** than solving the problem set fresh, so the per-token cost in this mode is minor. (If even that isn't wanted, grading falls back to manual score entry in teacher mode — the rest of the app is unaffected.) The code path is the same `services/ai.py` interface either way; only the underlying client + the generation flag differ, selected by which env vars are present.
 
 ---
 
@@ -136,7 +140,8 @@ Postgres via SQLAlchemy ORM; migrations via Alembic. All `id` are UUID PKs; all 
 | available_at | timestamptz | nullable; if set, assignment hidden/locked before this |
 | accepts_files | bool | default true |
 | accepts_text | bool | default true (text / LaTeX entry box) |
-| official_solution_url | text | nullable; if present, this is the answer key and no AI solution is generated |
+| official_solution_url | text | nullable; a published official solution (link out). If set, this is the answer key — no AI solution is generated. |
+| official_solution_file_path | text | nullable; an *uploaded* official solution file (Storage path). Same effect as `official_solution_url` — serves as the answer key. |
 | late_policy | enum `none` `flag_only` `percent_per_day` | default `flag_only` |
 | late_value | numeric | nullable; % per day when `percent_per_day` |
 | position | int | order within its group |
@@ -302,16 +307,18 @@ A list/grid of lecture entries (lecture number, title, optional thumbnail) each 
 
 ## 5. The Homework Loop (the heart of it)
 
-1. **Author the assignment** (teacher mode): title, `description_md` with the link to the real problem-set PDF, `points_possible`, `due_at`, submission types, `late_policy`, and `official_solution_url` if the course publishes one. Adds a `module_item kind=assignment` under the right module.
-2. **AI solution key.** On create (and via a "Generate solution" button): if `official_solution_url` is empty → create `ai_solution(status=generating)`, call Claude with the assignment description (+ any pasted text) and a "produce a complete, rigorous, well-explained worked solution" system prompt → store `content_md`, optionally render a PDF to Storage, set `status=ready`, log the transcript. If an official solution **is** present → skip; that URL is the key.
-3. **Submit.** You upload PDFs/images (→ Storage) and/or text. Create `submission(attempt_number=n, is_late = due_at and now > due_at, status=submitted)`. Immediately kick off grading.
-4. **AI grades.** Backend calls Claude with: the assignment (title, description, `points_possible`), the answer key (the `ai_solution.content_md`, **or** "the official solution is published at `<url>`; grade against standard real-analysis rigor on these criteria"), and your submission — **PDFs/images attached as document/image content blocks, text inline**. The prompt asks for structured output: a rubric breakdown (`[{criterion, points_awarded, points_possible, note}]`), a total `score`, and `feedback_md` (specific, constructive, points out exactly where a proof gap or error is). Persist a `grade` row; compute `late_penalty_applied` from `late_policy`; set `submission.status=graded`.
+All AI steps go through `services/ai.py`, which wraps the **Claude Agent SDK** (`claude-agent-sdk` → Claude Code CLI, authed via `CLAUDE_CODE_OAUTH_TOKEN`). The SDK is driven in a constrained, one-shot way: a system prompt that fixes the role + required output shape, a working directory pre-populated with the relevant files (problem-set text, solution key, submission PDFs/images) so Claude can read them with its file tools, and the model's final message parsed as JSON. Most agentic tools are disabled — it's used as "a model that can read attached files and return structured output", not an autonomous agent.
+
+1. **Author the assignment** (teacher mode): title, `description_md` with the link to the real problem-set PDF, `points_possible`, `due_at`, submission types, `late_policy`, and — if the course publishes one — a solution key, either as `official_solution_url` (link out) or by uploading a file (`official_solution_file_path` in Storage). Adds a `module_item kind=assignment` under the right module.
+2. **Solution key.** Whichever of these is true, in order: (a) if the assignment has an `official_solution_url` or `official_solution_file_path` → that *is* the key, nothing to generate; (b) else if `AI_SOLUTION_GENERATION_ENABLED` and an AI credential is configured → on create (and via a "Generate solution" button) create `ai_solution(status=generating)`, prompt Claude to produce a complete, rigorous, well-explained worked solution → store `content_md`, optionally render a PDF to Storage, set `status=ready`, save the transcript; (c) else → the assignment has *no key*; it's still usable, but autograding is deferred (see step 4).
+3. **Submit.** You upload PDFs/images (→ Storage `submissions/…`) and/or paste text/LaTeX. Create `submission(attempt_number=n, is_late = due_at and now > due_at, status=submitted)`. If a solution key exists (official or AI), immediately kick off grading; otherwise leave it `submitted` with an "awaiting solution key — autograde will run once a key is provided" notice (the cron tick / a later "Generate solution" / uploading a key will pick it up).
+4. **AI grades.** `services/ai.py` is given: the assignment (title, `description_md`, `points_possible`), the **answer key** (the `ai_solution.content_md`, or the official solution — the uploaded file placed in the work dir, or "the official solution is published at `<url>`; grade against standard real-analysis rigor"), and the **submission** (its PDFs/images placed in the work dir for Claude to read; pasted text inline). The system prompt asks for structured JSON: a `rubric_breakdown` (`[{criterion, points_awarded, points_possible, note}]`), a total `score`, and `feedback_md` (specific, constructive — names exactly where a proof has a gap or error). Persist a `grade` row; compute `late_penalty_applied` from `late_policy`; set `submission.status=graded`.
 5. **Announce + email.** Create `announcement(kind=graded, course, related_assignment, title="Graded: <assignment>", body_md=summary+score+top feedback points)`. Send a Resend email to `app_user.email` (subject `[<course code>] <assignment> graded — N/M`, body = score, rubric summary, first paragraph of feedback, link to the assignment page). Set `announcement.emailed_at`; write `email_log`.
-6. **Deadline reminders** (hourly `POST /cron/tick`, `X-Cron-Secret`): for each published assignment with `due_at` within the next 48h (then again within 24h) and **no submission** → if no `cron_marker` for that `(threshold, assignment)` → create `announcement(kind=deadline)`, email it, write the marker. Same tick also: re-drives any `ai_solution` stuck `generating`/`failed` (bounded retries), and any `submission` stuck `grading`.
+6. **Deadline reminders + sweeps** (hourly `POST /cron/tick`, `X-Cron-Secret`): for each published assignment with `due_at` within the next 48h (then again within 24h) and **no submission** → if no `cron_marker` for that `(threshold, assignment)` → create `announcement(kind=deadline)`, email it, write the marker. Same tick also: re-drives any `ai_solution` stuck `generating`/`failed` (bounded retries), grades any `submission` that is `submitted` but now has a key available, and re-drives any `submission` stuck `grading`.
 
-**Failure handling.** Every Claude/Resend call is wrapped with a timeout + bounded retry (exponential backoff). Hard failure → the relevant status goes to `*_failed` / `email_log.status=failed` and is **surfaced in the UI** with a Retry control — nothing fails silently. Every AI prompt+response is logged (transcript in Storage, path on the row) so you can see *why* a submission got the score it got.
+**Failure handling.** Every Agent-SDK / Resend call is wrapped with a timeout + bounded retry (exponential backoff). Hard failure → the relevant status goes to `*_failed` / `email_log.status=failed` and is **surfaced in the UI** with a Retry control — nothing fails silently. Every AI prompt + transcript is logged (to Storage, path on the row) so you can see *why* a submission got the score it got.
 
-**Cost control.** AI solution generation happens once per assignment (cached on `ai_solution`). Grading happens once per submission attempt. Both are explicit, user-triggered events (creating an assignment / submitting), not background polling — the cron tick only sends emails and retries, it never originates AI work on its own except to retry an already-started job.
+**Cost / quota control.** AI solution generation happens at most once per assignment (cached on `ai_solution`). Grading happens once per submission attempt. Both are explicit, user-triggered events (creating an assignment / submitting), not background polling — the cron tick only sends emails and re-drives already-started or now-unblocked jobs, it never originates AI work on its own. If you want zero AI generation, run with `AI_SOLUTION_GENERATION_ENABLED=false` and just attach solution keys yourself.
 
 ---
 
@@ -331,7 +338,9 @@ ocw-canvas/                           (new git repo · public · MIT license)
                                       submissions, grades, announcements, cron, teacher
       auth.py                         password hashing, JWT issue/verify, cookie deps
       services/
-        ai.py                         Anthropic client; solution-gen + grading prompt builders
+        ai.py                         AI interface: solution-gen + grading. Backend = Claude
+                                      Agent SDK (OAuth token) or Anthropic API (key), chosen by env.
+                                      Builds the work dir / message, fixes the JSON output contract.
         grading.py                    late-penalty + rollup math (pure functions, well-tested)
         email.py                      Resend client; templates
         storage.py                    Supabase Storage upload + signed-URL helpers
@@ -339,7 +348,7 @@ ocw-canvas/                           (new git repo · public · MIT license)
     alembic/                          versioned migrations
     tests/                            pytest (see §8)
     render.yaml                       Render: 1 Web Service + 1 Cron Job
-    Dockerfile                        (if Render needs it; else native Python build)
+    Dockerfile                        Python 3.12 + Node (for the Claude Code CLI) + uv install
   frontend/
     package.json                      Vite + React + TypeScript
     src/
@@ -361,17 +370,22 @@ ocw-canvas/                           (new git repo · public · MIT license)
 ```
 
 - **Frontend deploy:** GitHub Action on push to `main` → `npm ci && npm run build` → publish `frontend/dist/` to `gh-pages` (peaceiris/actions-gh-pages). `VITE_API_BASE_URL` injected at build time = the Render backend URL. Same model as education-log.
-- **Backend deploy:** `render.yaml` declares a Web Service (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`) and a Cron Job (`curl -fsS -X POST "$SELF_URL/cron/tick" -H "X-Cron-Secret: $CRON_SECRET"`, schedule `0 * * * *`). Env vars in the Render dashboard: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `JWT_SECRET`, `CRON_SECRET`, `FRONTEND_ORIGIN` (for CORS allow-list), `OWNER_EMAIL`. CORS allows only the GitHub Pages origin.
-- **Database:** Supabase project (US region). `alembic upgrade head` on first setup and as a Render pre-deploy step. Storage buckets `submissions` and `solutions` created private. `app_user` row created by a small `manage.py create-owner` command that prompts for email + password (or reads from env), bcrypt-hashing the password.
+- **Backend deploy:** `render.yaml` declares a Web Service (Docker image — Python + Node + Claude Code CLI; runs `uvicorn app.main:app --host 0.0.0.0 --port $PORT`) and a Cron Job (`curl -fsS -X POST "$SELF_URL/cron/tick" -H "X-Cron-Secret: $CRON_SECRET"`, schedule `0 * * * *`). Env vars in the Render dashboard:
+  - `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
+  - `CLAUDE_CODE_OAUTH_TOKEN` *(preferred AI credential — owner's Claude subscription)* — or `ANTHROPIC_API_KEY` as the alternative; `AI_SOLUTION_GENERATION_ENABLED` *(bool, default true)*
+  - `RESEND_API_KEY`, `OWNER_EMAIL`
+  - `JWT_SECRET`, `CRON_SECRET`
+  - `FRONTEND_ORIGIN` (CORS allow-list — only the GitHub Pages origin)
+- **Database:** Supabase project (US region). `alembic upgrade head` on first setup and as a Render pre-deploy step. Storage buckets `submissions` and `solutions` created private (`solutions` also holds uploaded official-solution files and prompt transcripts). `app_user` row created by a small `manage.py create-owner` command that prompts for email + password (or reads from env), bcrypt-hashing the password.
 - **Secrets** never committed; `.env.example` documents the full list.
 
 ### One-time setup (README)
 
 1. Create Supabase project; copy `DATABASE_URL`, project URL, service key; create the two private Storage buckets.
-2. Create the Anthropic API key and Resend API key (verify a sender domain or use Resend's onboarding domain for now).
+2. Generate the Claude Code OAuth token: run `claude setup-token` locally (requires a Claude Pro/Max subscription) → set `CLAUDE_CODE_OAUTH_TOKEN`. *(Fallback if that path doesn't work on the host: instead set `ANTHROPIC_API_KEY` and `AI_SOLUTION_GENERATION_ENABLED=false` — the API key is then used only for grading against a key you attach yourself, which is cheap; see §2.)* Create the Resend API key (verify a sender domain or use Resend's onboarding domain for now).
 3. `cd backend && uv sync && alembic upgrade head && python -m app.manage create-owner`.
 4. `python -m seed.seed_template_course` to load 18.100B.
-5. Push the repo; the GitHub Action deploys the frontend to Pages; create the Render Web Service + Cron Job from `render.yaml`; set env vars.
+5. Push the repo; the GitHub Action deploys the frontend to Pages; create the Render Web Service (from the `Dockerfile` / `render.yaml`) + Cron Job; set env vars.
 
 ---
 
@@ -379,7 +393,7 @@ ocw-canvas/                           (new git repo · public · MIT license)
 
 1. **P1 — skeleton + read-mostly Canvas.** New repo; FastAPI + SQLAlchemy + Alembic + config + native auth; CRUD for `course` / `module` / `module_item`; React shell with the global rail + Dashboard + Course Home / Syllabus / Modules / Video pages; teacher-mode editing for those entities. **Outcome:** a working "Canvas without homework" where all materials link out — already useful.
 2. **P2 — assignments & submissions.** `assignment` CRUD; Assignments list + detail; file upload to Supabase Storage; submission flow; late flagging; Grades page + rollup math. Manual score entry allowed (no AI yet). **Outcome:** full homework tracking, AI-less.
-3. **P3 — AI.** `ai_solution` generation; AI grading producing rubric + score + feedback; Retry handling; prompt/response transcript logging; the "view reference solution" toggle. **Outcome:** the homework loop closes itself.
+3. **P3 — AI.** `services/ai.py` over the Claude Agent SDK (OAuth-token auth; API-key fallback; `AI_SOLUTION_GENERATION_ENABLED` flag); uploaded/linked official solutions; `ai_solution` generation; AI grading producing rubric + score + feedback; "awaiting solution key" state; Retry handling; transcript logging; the "view reference solution" toggle; the Docker image (Python + Node). **Outcome:** the homework loop closes itself.
 4. **P4 — email & cron.** Resend integration (graded / password-reset emails); Announcements page + unread badge; `/cron/tick` for 48h/24h deadline reminders + stuck-job retries; `cron_marker` idempotency; `render.yaml` cron job. **Outcome:** "AI announces you" works end to end.
 5. **P5 — seed + polish.** Build the 18.100B course fully (all modules, all 10 problem sets as assignments with the real PDF links, the 23 video lectures, the syllabus, the exams); tighten the Canvas styling pass; finish the README. **Outcome:** the seed course is a faithful Canvas course you can actually study from.
 
@@ -389,8 +403,8 @@ Each phase ends in something runnable; each becomes its own section of the imple
 
 ## 8. Testing & Quality
 
-- **Backend unit tests (pytest):** the grading-math pure functions (late penalty under each policy; assignment current-grade selection; course grade rollup, weighted and unweighted); `cron/tick` idempotency (running it twice sends no duplicate emails / creates no duplicate announcements); the AI prompt-builder functions (given an assignment + key + submission, the assembled message blocks are correct — content kinds, order, that PDFs become document blocks); auth (JWT issue/verify, expired token rejected, password hash round-trips); Storage path construction. **Anthropic and Resend calls are mocked** in all unit tests.
-- **Optional live smoke scripts** (gated on `ANTHROPIC_API_KEY` / `RESEND_API_KEY` being set; not run in CI): generate one solution, grade one toy submission, send one test email — for manual sanity only.
+- **Backend unit tests (pytest):** the grading-math pure functions (late penalty under each policy; assignment current-grade selection; group percentage with `drop_lowest_n`; course rollup, weighted and unweighted); `cron/tick` idempotency (running it twice sends no duplicate emails / announcements) and its "grade now-unblocked submissions" sweep; the AI request builders (given an assignment + key + submission → the work dir is populated with the right files, the system prompt and JSON-output contract are correct, the model's JSON reply is parsed/validated); the solution-key resolution logic (official URL > official file > AI solution > none); auth (JWT issue/verify, expired token rejected, password hash round-trips); Storage path construction. **The AI client call (Agent SDK or Anthropic API, behind the `services/ai.py` interface) and Resend are mocked** in all unit tests.
+- **Optional live smoke scripts** (gated on `CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY` and `RESEND_API_KEY` being set; not run in CI): generate one solution, grade one toy submission, send one test email — manual sanity only.
 - **Frontend:** TypeScript across the app; a typed API client. Verification is a manual browser pass — the app is mostly CRUD plus the homework flow, which is walked through by hand (author an assignment → generate solution → submit → see grade + email). ESLint + Prettier defaults.
 - **Backend lint/format:** ruff.
 - **CI:** a GitHub Action runs `ruff check`, `pytest`, and the frontend `tsc --noEmit` + `eslint` on push/PR.
@@ -421,7 +435,7 @@ Source: <https://ocw.mit.edu/courses/18-100b-real-analysis-spring-2025/>
 
 **Assignment groups:** `Problem Sets` (weight 50, `drop_lowest_n=1`), `Midterm` (weight 20), `Final Exam` (weight 30).
 
-**Assignments** — the 10 problem sets, each: title `Problem Set k — <topic>`, `description_md` containing the link to that problem set's OCW PDF, `points_possible=100`, group `Problem Sets`, `due_at` left null (or filled from a notional schedule when you start the course), `accepts_files=true`, `accepts_text=true`, `official_solution_url` left empty (OCW 18.100B does not publish PS solutions) → so the **AI generates the reference solution** for each. Plus the **Midterm** (group `Midterm`) and **Final Exam** (group `Final Exam`) as assignments linking the exam PDFs. (Exam files: include if present on the OCW page; otherwise just the two exam-style assignments and the review-session videos.)
+**Assignments** — the 10 problem sets, each: title `Problem Set k — <topic>`, `description_md` containing the link to that problem set's OCW PDF, `points_possible=100`, group `Problem Sets`, `due_at` left null (or filled from a notional schedule when you start the course), `accepts_files=true`, `accepts_text=true`, no solution key attached (OCW 18.100B does not publish PS solutions) → so the **AI generates the reference solution** for each when you submit (or, with `AI_SOLUTION_GENERATION_ENABLED=false`, you'd attach a key yourself first). Plus the **Midterm** (group `Midterm`) and **Final Exam** (group `Final Exam`) as assignments linking the exam PDFs. (Exam files: include if present on the OCW page; otherwise just the two exam-style assignments and the review-session videos.)
 
 **Video Lectures** — all 23 lecture videos (+ the 2 review sessions) as `module_item kind=video` rows under their units, surfaced together on the Video Lectures page, each linking the corresponding OCW video page.
 
@@ -431,6 +445,7 @@ After 18.100B is in, the other courses from the brief (Linear Algebra → MIT 18
 
 ## 10. Open Operational Questions (resolve during implementation, not now)
 
+- **Does the Claude Code OAuth token actually work from the Render host?** Verify early in P3 (run `claude -p "hi"` / a tiny Agent-SDK call on the deployed image). If it's rejected there or the CLI won't run on the free tier, fall back to `ANTHROPIC_API_KEY`, or to the `AI_SOLUTION_GENERATION_ENABLED=false` "bring your own solution key" mode — both are already supported by the design, so this is a config decision, not a redesign. Also: confirm the SDK can be driven non-interactively with files pre-placed in the cwd and a strict JSON output contract (the alternative is shelling out to `claude -p` directly).
 - Custom domain vs `dafu-zhu.github.io/ocw-canvas/` for the frontend — defer until deployed.
 - Resend sender: onboarding domain initially vs verifying a custom domain — start with whatever Resend allows fastest; revisit if deliverability matters.
 - Rendering AI solutions to PDF (Storage) vs just showing the markdown in-app — start with in-app markdown; add the PDF render only if it feels needed.

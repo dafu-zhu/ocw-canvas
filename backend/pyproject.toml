@@ -10,7 +10,7 @@ dependencies = [
     "alembic>=1.13",
     "pydantic-settings>=2.5",
     "pyjwt>=2.9",
-    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.1",
     "python-multipart>=0.0.12",
     "httpx>=0.27",
     "email-validator>=2.0",
@@ -25,9 +25,12 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPI's `= Depends(...)` / `= Cookie(...)` in defaults is the intended idiom.
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

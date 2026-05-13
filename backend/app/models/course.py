@@ -1,8 +1,14 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.models.base import TimestampMixin, _uuid
+
+if TYPE_CHECKING:
+    from app.models.assignment import Assignment, AssignmentGroup
+    from app.models.module import Module
 
 
 class Course(Base, TimestampMixin):

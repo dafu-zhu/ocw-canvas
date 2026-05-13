@@ -181,3 +181,15 @@ export interface SolutionInfo {
   generation_available: boolean;
   ai_solution: AiSolution | null;
 }
+
+export interface Announcement {
+  id: string;
+  course_id: string | null;
+  kind: "graded" | "deadline" | "manual" | "system";
+  title: string;
+  body_md: string;
+  related_assignment_id: string | null;
+  read_at: string | null;
+  emailed_at: string | null;
+  created_at: string;
+}

@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 interface Crumb {
@@ -8,8 +9,13 @@ interface Crumb {
 }
 
 export function AppLayout({ crumbs, children }: { crumbs: Crumb[]; children: ReactNode }) {
-  const { user, teacherMode, setTeacherMode, logout } = useAuth();
+  const { user, teacherMode, setTeacherMode, logout, unreadCount, refreshUnread } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    refreshUnread();
+  }, [location.pathname, refreshUnread]);
 
   async function doLogout() {
     await logout();
@@ -31,7 +37,7 @@ export function AppLayout({ crumbs, children }: { crumbs: Crumb[]; children: Rea
         <RailLink to="/" glyph="🏠" label="Dashboard" />
         <RailLink to="/courses" glyph="📚" label="Courses" />
         <RailLink to="/calendar" glyph="📅" label="Calendar" />
-        <RailLink to="/announcements" glyph="📨" label="Inbox" />
+        <RailLink to="/announcements" glyph="📨" label="Inbox" badge={unreadCount} />
         <div className="spacer" />
         <button className="rail-item" onClick={doLogout}>
           <span className="glyph">⎋</span>Log out
@@ -42,7 +48,11 @@ export function AppLayout({ crumbs, children }: { crumbs: Crumb[]; children: Rea
           {crumbs.map((c, i) => (
             <span key={i}>
               {i > 0 && <span className="sep">›</span>}
-              {c.to ? <NavLink to={c.to}>{c.label}</NavLink> : <span className="leaf">{c.label}</span>}
+              {c.to ? (
+                <NavLink to={c.to}>{c.label}</NavLink>
+              ) : (
+                <span className="leaf">{c.label}</span>
+              )}
             </span>
           ))}
         </div>
@@ -52,7 +62,17 @@ export function AppLayout({ crumbs, children }: { crumbs: Crumb[]; children: Rea
   );
 }
 
-function RailLink({ to, glyph, label }: { to: string; glyph: string; label: string }) {
+function RailLink({
+  to,
+  glyph,
+  label,
+  badge,
+}: {
+  to: string;
+  glyph: string;
+  label: string;
+  badge?: number;
+}) {
   return (
     <NavLink
       to={to}
@@ -61,6 +81,7 @@ function RailLink({ to, glyph, label }: { to: string; glyph: string; label: stri
     >
       <span className="glyph">{glyph}</span>
       {label}
+      {badge != null && badge > 0 && <span className="rail-badge">{badge}</span>}
     </NavLink>
   );
 }

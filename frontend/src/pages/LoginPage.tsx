@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 export function LoginPage() {
@@ -10,6 +11,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
+  const [sent, setSent] = useState(false);
 
   if (!loading && user) return <Navigate to="/" replace />;
 
@@ -18,10 +21,15 @@ export function LoginPage() {
     setErr("");
     setBusy(true);
     try {
-      await login(email, password);
-      nav("/");
+      if (forgot) {
+        await api.forgotPassword(email);
+        setSent(true);
+      } else {
+        await login(email, password);
+        nav("/");
+      }
     } catch {
-      setErr("Invalid email or password.");
+      setErr(forgot ? "Couldn't send the reset email." : "Invalid email or password.");
     } finally {
       setBusy(false);
     }
@@ -39,21 +47,39 @@ export function LoginPage() {
           onChange={(e) => setEmail(e.target.value)}
           autoFocus
         />
-        <label htmlFor="pw">Password</label>
-        <input
-          id="pw"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        {!forgot && (
+          <>
+            <label htmlFor="pw">Password</label>
+            <input
+              id="pw"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </>
+        )}
         {err && <div className="err">{err}</div>}
+        {sent && (
+          <div className="muted" style={{ fontSize: 13 }}>
+            If that email is registered, a reset link is on its way.
+          </div>
+        )}
         <div className="actions">
           <button className="btn primary" disabled={busy} style={{ width: "100%" }}>
-            {busy ? "Signing in…" : "Sign in"}
+            {busy ? "Working…" : forgot ? "Email me a reset link" : "Sign in"}
           </button>
-          <span className="muted" title="Available once email is configured (later phase)">
-            Forgot password?
-          </span>
+          <button
+            type="button"
+            className="linklike"
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#0374b5" }}
+            onClick={() => {
+              setForgot(!forgot);
+              setErr("");
+              setSent(false);
+            }}
+          >
+            {forgot ? "Back to sign in" : "Forgot password?"}
+          </button>
         </div>
       </form>
     </div>

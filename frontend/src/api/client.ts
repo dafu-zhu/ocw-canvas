@@ -1,5 +1,6 @@
 import type {
   AiSolution,
+  Announcement,
   Assignment,
   AssignmentDetail,
   AssignmentGroup,
@@ -55,6 +56,10 @@ export const api = {
   login: (email: string, password: string) => req<User>("POST", "/auth/login", { email, password }),
   logout: () => req<{ ok: boolean }>("POST", "/auth/logout"),
   me: () => req<User>("GET", "/auth/me"),
+  forgotPassword: (email: string) =>
+    req<{ ok: boolean }>("POST", "/auth/forgot-password", { email }),
+  resetPassword: (token: string, newPassword: string) =>
+    req<User>("POST", "/auth/reset-password", { token, new_password: newPassword }),
 
   // courses
   listCourses: () => req<Course[]>("GET", "/courses"),
@@ -118,4 +123,19 @@ export const api = {
   generateSolution: (assignmentId: string) =>
     req<AiSolution>("POST", `/assignments/${assignmentId}/generate-solution`),
   regrade: (submissionId: string) => req<Grade>("POST", `/submissions/${submissionId}/regrade`),
+
+  // announcements
+  listAnnouncements: (courseId?: string) =>
+    req<Announcement[]>(
+      "GET",
+      `/announcements${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
+    ),
+  getUnreadCount: () => req<{ count: number }>("GET", "/announcements/unread-count"),
+  getAnnouncement: (id: string) => req<Announcement>("GET", `/announcements/${id}`),
+  markRead: (id: string) => req<Announcement>("POST", `/announcements/${id}/read`),
+  markAllRead: (courseId?: string) =>
+    req<{ count: number }>(
+      "POST",
+      `/announcements/mark-all-read${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ""}`,
+    ),
 };

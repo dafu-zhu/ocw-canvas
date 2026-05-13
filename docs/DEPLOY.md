@@ -23,12 +23,20 @@ Repo: <https://github.com/dafu-zhu/ocw-canvas>. Default branch `master`. CI / Pa
 
 ## 1 — Supabase (Postgres + Storage), free
 
-1.1. Create an account at <https://supabase.com>, then **New project**. Pick a region close to Render's region (e.g. US‑East). Save the project's **database password** somewhere — you can't view it again.
+1.1. Create an account at <https://supabase.com>, then **New project**. Pick a region close to Render's region (US‑East‑2 / Ohio is the safe pick on Render's free tier). Save the project's **database password** somewhere — you can't view it again.
 
-1.2. **Project Settings → Database → Connection string → URI**. Copy the value (looks like `postgresql://postgres.<ref>:<pwd>@aws-0-<region>.pooler.supabase.com:6543/postgres`). **This is `DATABASE_URL`.** The app rewrites the scheme to `postgresql+psycopg://…` automatically; both the pooler (`:6543`) and the direct connection (`db.<ref>.supabase.co:5432`) work.
+1.2. **Settings → Database → Connect** (or **Connection string** on older UI). You'll see three connection-string variants. **Pick "Session pooler"**, not "Direct connection":
+
+| Variant | When to use |
+|---|---|
+| Direct connection (`db.<ref>.supabase.co:5432`) | ❌ Do **not** use. Resolves to **IPv6 only**, and Render's free containers have no IPv6 egress → boot loop with `Network is unreachable` |
+| **Session pooler (`aws-0-<region>.pooler.supabase.com:5432`)** | ✅ **Use this.** IPv4 endpoint; supports prepared statements; matches SQLAlchemy's long-lived pool model |
+| Transaction pooler (`:6543`) | Also IPv4 and works (the code disables client-side prepared statements via `prepare_threshold=None` for compatibility); session is preferable for our use case |
+
+Copy the Session pooler URI — looks like `postgresql://postgres.<ref>:<pwd>@aws-0-<region>.pooler.supabase.com:5432/postgres` — and replace `[YOUR-PASSWORD]` with the password from 1.1. **This is `DATABASE_URL`.** The app rewrites the scheme to `postgresql+psycopg://…` automatically.
 
 1.3. **Project Settings → API**. Copy:
-- **Project URL** → `SUPABASE_URL` (e.g. `https://<ref>.supabase.co`, no trailing slash)
+- **Project URL** → `SUPABASE_URL` (e.g. `https://<ref>.supabase.co`, no trailing slash, **no `/rest/v1/`** path — the bare project URL only)
 - **`service_role` secret** → `SUPABASE_SERVICE_KEY`. Treat this like a root password — backend only, never the frontend.
 
 1.4. **Storage → New bucket**. Create **two private buckets**:
@@ -74,51 +82,63 @@ Get a key at <https://console.anthropic.com>. You'll set it on Render as **`ANTH
 
 Render reads `backend/render.yaml` and stands up a Docker Web Service from `backend/Dockerfile`.
 
-4.1. Sign in at <https://dashboard.render.com> → **New → Blueprint** → connect the `dafu-zhu/ocw-canvas` repo → it detects `render.yaml` and proposes:
+4.1. Sign in at <https://dashboard.render.com> → **New → Blueprint** → connect the `dafu-zhu/ocw-canvas` repo. The blueprint form asks for:
 
-- a **Web Service** `ocw-canvas-api`
-- a **Cron Job** `ocw-canvas-tick` (Render Cron Jobs may **not** be on the free plan — see 4.4)
+| Field | Value |
+|---|---|
+| Blueprint Name | anything (e.g. `ocw-canvas`) |
+| Branch | `master` |
+| **Blueprint Path** | **`backend/render.yaml`** ← the YAML lives under `backend/`, not the repo root. Render's default of bare `render.yaml` won't find it. |
+
+Click **Retry** if you initially got "not found". The blueprint declares one **Web Service** `ocw-canvas-api`. (Render's paid plan also supports a Cron Job; the `render.yaml` intentionally doesn't declare one — see 4.4.)
 
 4.2. **Generate two secrets locally** and keep them handy:
 ```bash
 python -c "import secrets; print('JWT_SECRET=' + secrets.token_urlsafe(32))"
 python -c "import secrets; print('CRON_SECRET=' + secrets.token_urlsafe(24))"
 ```
-(Or let Render `generateValue` them via the blueprint; in that case open the service after deploy and copy the values it generated.)
+*Don't* rely on Render's `generateValue: true` for `CRON_SECRET` — you need the value to match a GitHub Actions secret in step 8, and if Render generates it independently the two diverge silently. If the blueprint preview shows an auto-generated row for `JWT_SECRET` / `CRON_SECRET`, **delete those rows before pasting the values below**.
 
-4.3. **Fill in the env vars on the Web Service** (the blueprint marks the secret ones `sync:false` so Render prompts you). Leave the placeholders below as-is — fill them with the values from steps 1–3:
+4.3. **Fill in the env vars on the Web Service.** Use Render's **bulk edit** ("Add from .env" / `…` menu in the env-var table) and paste the whole block:
 
-| Key | Value |
-|---|---|
-| `DATABASE_URL` | from 1.2 |
-| `SUPABASE_URL` | from 1.3 |
-| `SUPABASE_SERVICE_KEY` | from 1.3 |
-| **One of:** `CLAUDE_CODE_OAUTH_TOKEN` *or* `ANTHROPIC_API_KEY` | from 3 |
-| `AI_SOLUTION_GENERATION_ENABLED` | `true` (or `false` if you went path (B) and want cheap mode) |
-| `AI_MODEL` | `claude-sonnet-4-6` (default; bump to a newer model later if you want) |
-| `RESEND_API_KEY` | from 2.1 |
-| `OWNER_EMAIL` | the address that receives graded / deadline / reset emails |
-| `OWNER_EMAIL_FROM` | `onboarding@resend.dev` (or your verified sender) |
-| `JWT_SECRET` | from 4.2 |
-| `CRON_SECRET` | from 4.2 — **write this down**; you'll reuse it in step 8 |
-| `FRONTEND_ORIGINS` | leave as `https://dafu-zhu.github.io` for now; refine in step 7 |
-| `FRONTEND_BASE_URL` | leave as `https://dafu-zhu.github.io/ocw-canvas` for now; refine in step 7 |
-| `COOKIE_SECURE` | `true` |
-| `COOKIE_SAMESITE` | `none` |
+```
+DATABASE_URL=postgresql://postgres.<ref>:<pwd>@aws-0-<region>.pooler.supabase.com:5432/postgres
+SUPABASE_URL=https://<ref>.supabase.co
+SUPABASE_SERVICE_KEY=<from 1.3>
+CLAUDE_CODE_OAUTH_TOKEN=<from 3A — or use ANTHROPIC_API_KEY from 3B>
+AI_SOLUTION_GENERATION_ENABLED=true
+AI_MODEL=claude-sonnet-4-6
+RESEND_API_KEY=<from 2.1>
+OWNER_EMAIL=<recipient of graded/deadline/reset emails>
+OWNER_EMAIL_FROM=onboarding@resend.dev
+JWT_SECRET=<from 4.2>
+CRON_SECRET=<from 4.2 — also used in step 8>
+FRONTEND_ORIGINS=https://dafu-zhu.github.io
+FRONTEND_BASE_URL=https://dafu-zhu.github.io/ocw-canvas
+COOKIE_SECURE=true
+COOKIE_SAMESITE=none
+```
 
-4.4. **About the cron service.** Render Cron Jobs aren't on the free plan. Two options:
+> Notes: `DATABASE_URL` is the **Session pooler** URL (port 5432) — not the direct one, see 1.2. `SUPABASE_URL` is the bare project URL (no `/rest/v1/`). Refine `FRONTEND_*` in step 7 if your Pages URL differs.
 
-- **Cheapest path** (recommended for personal use): delete the `ocw-canvas-tick` service from the blueprint, and let the **GitHub Actions cron workflow** (`.github/workflows/cron-tick.yml`, already in the repo) fire the hourly tick. See step 8.
-- **Or** keep it and accept the small monthly fee.
+4.4. **No Render cron job.** `render.yaml` intentionally declares only the web service — Render Cron Jobs require a paid plan, and the **GitHub Actions cron workflow** (`.github/workflows/cron-tick.yml`) does the same thing for free. See step 8.
 
-4.5. **Deploy.** The Docker `CMD` runs `alembic upgrade head` automatically, then `uvicorn`. Wait for the service to go green (~3–5 min on the free plan). Note the public URL Render assigns — e.g. `https://ocw-canvas-api.onrender.com`. **This is the backend URL.** Verify:
+4.5. **Deploy.** The Docker `CMD` runs `alembic upgrade head` automatically, then `uvicorn`. Wait for the service to go green (~5–8 min on the free plan — building the Python + Node + Claude Code CLI image takes a few minutes). Note the public URL Render assigns — e.g. `https://ocw-canvas-api.onrender.com`. **This is the backend URL.** Verify:
 
 ```bash
 curl https://<your-service>.onrender.com/api/health
 # -> {"status":"ok"}
 ```
 
-If it doesn't go green: open **Logs**. Common gotchas — wrong `DATABASE_URL` (`alembic` errors), missing `JWT_SECRET` (raises at startup), wrong `SUPABASE_URL` format (must be the project URL, not the dashboard URL).
+If the deploy fails, open **Events / Logs** and look for the first red line. The ones we've seen:
+
+| Symptom in Render logs | Cause | Fix |
+|---|---|---|
+| `Network is unreachable` connecting to Postgres on IPv6 (`2600:1f16:…`) | You used the **direct** Supabase connection (1.2). Render free is IPv4-only. | Use the **Session pooler** URL (1.2). |
+| `prepared statement … already exists` | Behind transaction pooler without `prepare_threshold=None`. | Already fixed in `app/db.py` (we ship this). Confirm you're on master. |
+| `services[N].plan: free not a valid plan for service type cron` (during blueprint parse) | `render.yaml` declares a cron service on the free plan. | The shipped `render.yaml` doesn't declare a cron service. If you forked it, drop the `type: cron` block. |
+| `mapping values are not allowed in this context` (during blueprint parse) | YAML scalar with a literal `:` (e.g. an HTTP header). | Wrap the value in a `>-` block scalar or quote it. |
+| `claude CLI exited 1 … --dangerously-skip-permissions cannot be used with root/sudo privileges` | Earlier version of the AI service. | Already fixed (we ship `--allowedTools Read,Glob,Grep` instead of bypass mode). Pull master. |
 
 ---
 
@@ -212,25 +232,32 @@ If all eight work: you're live.
 
 ---
 
-## 10 — Resolve §10 open question #1: does the Claude OAuth token work on Render?
+## 10 — §10 open questions — resolved
 
-You answered this in 9.4:
+| Question | Resolution shipped on `master` |
+|---|---|
+| **Does the Claude OAuth token work on Render?** | **Yes — with the fixes we ship.** The Python `claude-agent-sdk` wrapper failed inside Render's container (stream-json mode swallowed stderr; `--permission-mode bypassPermissions` triggered the CLI's safety check against running `--dangerously-skip-permissions` as root). `services/ai.py` now invokes the CLI **directly** via `subprocess.run` with `--output-format json`, only whitelists read-only tools (`Read,Glob,Grep`), and sets `HOME=/tmp` / `CI=1` / `DISABLE_AUTOUPDATER=1` defensively. The OAuth path works end-to-end with `CLAUDE_CODE_OAUTH_TOKEN`. |
+| Custom domain vs `dafu-zhu.github.io/ocw-canvas/` | Start with the subpath; Vite's `base` is already `/ocw-canvas/`. Add a domain later via Pages + a `frontend/public/CNAME`. |
+| Resend sender | Onboarding domain (`onboarding@resend.dev`) for now; verify your own domain later if deliverability matters. |
+| PDF rendering of AI solutions | Markdown-in-app via KaTeX (LaTeX renders as math). `ai_solution.pdf_path` exists but is unused. |
+| `app_user` as a table vs env | Already a table; password reset works against it. |
+| Free-tier cold starts | The hourly GitHub Actions cron-tick doubles as a keep-warm ping. |
 
-| What you saw | What it means | Action |
-|---|---|---|
-| `status: ready`, content rendered | OAuth path works on Render. | Done. Keep `CLAUDE_CODE_OAUTH_TOKEN`. |
-| `status: failed` with an error mentioning `claude`, `node`, `CLI`, or the token | The CLI / token path didn't work on the deployed image. | On Render: remove `CLAUDE_CODE_OAUTH_TOKEN`, add `ANTHROPIC_API_KEY`. Optionally also `AI_SOLUTION_GENERATION_ENABLED=false` (cheap mode). Redeploy and retry. |
-| `status: pending`, `error: "… disabled …"` | Generation is intentionally off. | Either flip `AI_SOLUTION_GENERATION_ENABLED=true`, or attach an `official_solution_url`/file on the assignment yourself. |
-
-The other §10 items: custom domain (defer — start with the subpath; add later via Pages + a `frontend/public/CNAME`); Resend sender (start with the onboarding domain); PDF rendering of AI solutions (markdown-in-app is fine, `pdf_path` exists unused); `app_user` as a table (already done); free-tier cold starts (the cron tick keeps the service warm).
+**If the AI fails on you anyway** (different CLI version, future regression): switch the env on Render — remove `CLAUDE_CODE_OAUTH_TOKEN`, add `ANTHROPIC_API_KEY` (from <https://console.anthropic.com>). Optionally set `AI_SOLUTION_GENERATION_ENABLED=false` for the bring-your-own-key cheap mode. Same code path, different backend.
 
 ---
 
 ## Day-2 operations
 
 - **Watching the loop.** `email_log` and `announcement` are append-only — query Supabase Studio's SQL editor if anything looks off. AI prompt+response transcripts are in the `solutions` bucket under `logs/` (path stored on the row).
-- **Re-seeding.** `uv run python -m seed.seed_template_course --force` deletes + re-creates `MIT 18.100B`. Cascades take care of the modules / assignments / submissions / announcements.
+- **Updating OCW link data only (no destructive re-seed).** When OCW publishes a new lecture page or you want to refresh per-lecture video / notes URLs:
+  ```bash
+  DATABASE_URL="<session pooler URI>" uv run python -m seed.seed_template_course --update-urls
+  ```
+  This rewrites `module_item.external_url` for every "Lecture N (video)" / "Lecture N notes" / "Midterm review" / "Final review" / "Video lectures (all)" item — **in place**, preserving submissions, AI solutions, and announcements.
+- **Re-seeding.** `uv run python -m seed.seed_template_course --force` deletes + re-creates `MIT 18.100B` (destroys cascaded submissions / AI solutions / announcements). Prefer `--update-urls` for content fixes; reserve `--force` for structural overhauls.
 - **Adding another course.** Either via teacher mode in the UI (Dashboard → **+ Add course** → Modules → **+ Module / + Item** → Assignments → **+ Assignment group / + Assignment**), or write a new file under `backend/seed/`.
-- **Rotating secrets.** Update on Render → Manual Deploy. For `CRON_SECRET`, also update the GitHub repo secret (step 8) at the same time.
+- **Rotating secrets.** Update on Render → it auto-redeploys. For `CRON_SECRET`, update the GitHub Actions secret (step 8) **at the same time** — they must match or the cron returns 403.
 - **Schema changes.** New migration: `cd backend && uv run alembic revision --autogenerate -m "..."`, edit the file, commit. Render runs `alembic upgrade head` on every deploy.
+- **Math / LaTeX.** Solution and feedback markdown is rendered with KaTeX (`remark-math` + `rehype-katex`); `$inline$` and `$$block$$` work everywhere `<Markdown>` is used.
 - **Logs.** Render service → **Logs** tab. The CI pipeline runs `pytest` + `ruff` + frontend `typecheck`/`lint`/`build` on every push.

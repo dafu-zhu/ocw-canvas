@@ -39,8 +39,7 @@ Sign in with the owner credentials. Everything works without any cloud setup: fi
 
 ## Deployment
 
-- **Backend:** `backend/render.yaml` declares a Docker Web Service (built from `backend/Dockerfile`, Python 3.12 + Node + the Claude Code CLI) and a Docker Cron Job (`schedule: "0 * * * *"`, curls `/api/cron/tick` with a shared secret). Set the dashboard env vars (`DATABASE_URL`, `SUPABASE_*`, one AI credential, `RESEND_API_KEY`, `OWNER_EMAIL*`, `JWT_SECRET`, `CRON_SECRET`, `FRONTEND_ORIGINS`, `FRONTEND_BASE_URL`, and `SELF_URL` on the cron job). Run `alembic upgrade head` (the Docker `CMD` does this) and `python -m app.manage create-owner` / `python -m seed.seed_template_course` once.
-- **Frontend:** built by a GitHub Action and published to `gh-pages` (base path `/ocw-canvas/`); `VITE_API_BASE_URL` injected at build time = the Render backend URL.
+End-to-end runbook (Supabase → Render → Pages → cron, ~45 min): **[`docs/DEPLOY.md`](docs/DEPLOY.md)**. Short version: `backend/render.yaml` builds the Dockerfile (Python 3.12 + Node + Claude Code CLI) on Render free; the GitHub Action `.github/workflows/deploy.yml` publishes the Vite SPA to `gh-pages`; the GitHub Action `cron-tick.yml` POSTs `/api/cron/tick` hourly (free alternative to Render's paid Cron Job).
 
 ## Layout & docs
 

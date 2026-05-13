@@ -83,6 +83,7 @@ Migrations go up to `0005`. Every push to master triggers Render's `alembic upgr
 - **Migrations.** `cd backend && DATABASE_URL=sqlite:///./_x.db uv run alembic revision --autogenerate -m "…"` against a fresh sqlite, then rename the file to the next sequential number (e.g. `0006_…`), set `revision="0006"` / `down_revision="0005"`, then `rm _x.db`. Commit the migration alongside the model change.
 - **Seed updates that don't drop user data.** Use `python -m seed.seed_template_course --update-urls` — it rewrites module-item URLs, assignment description_md, and assignment coverage in place. `--force` deletes + re-creates (loses submissions / AI solutions / announcements).
 - **OCW URLs.** Always verify with curl/WebFetch before committing — patterns differ silently per term (we hit `/pages/assignments/` vs `/pages/problem-sets/`, lec-notes vs `pset` slugs, and review PDFs at `review_midterm` not `midterm_review`).
+- **`term_label` semantics.** `course.term_label` is the **user's self-study term**, NOT the year the OCW course was originally recorded. The seed defaults to a placeholder (currently `"Summer 2027"`) and the user edits it via teacher mode whenever their plan shifts. The OCW recording year belongs in `home_page_md` / `description` as source-material context. `--update-urls` deliberately does **not** touch `term_label` or `home_page_md` — those are user-customized fields.
 
 ---
 

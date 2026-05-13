@@ -157,7 +157,9 @@ write up your own solutions. The lowest score is dropped.
 One page of handwritten notes allowed; no computer or textbook.
 """
 
-HOME_MD = """**18.100B — Real Analysis (Spring 2025), MIT OpenCourseWare.**
+HOME_MD = """**MIT 18.100B — Real Analysis.** Course materials from MIT OpenCourseWare
+(video lectures recorded Spring 2025). The term shown above is *your* self-study term —
+edit it from the course settings when you change plans.
 
 Two goals: (1) learn to write rigorous proofs; (2) put single-variable calculus on a rigorous
 footing — sequences, series, continuity, differentiation, the Riemann integral, sequences of
@@ -322,7 +324,9 @@ def seed(db: Session, force: bool = False) -> Course:
         code=CODE,
         title="Real Analysis",
         institution="MIT OpenCourseWare",
-        term_label="Spring 2025",
+        # term_label = the *user's* self-study term, not the OCW recording year.
+        # Edit this in teacher mode (Course → Edit) whenever your plan shifts.
+        term_label="Summer 2027",
         instructor="Prof. Tobias Holck Colding",
         external_home_url=HOME,
         status="planned",

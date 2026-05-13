@@ -260,12 +260,15 @@ def _invoke_agent_sdk(
     with tempfile.TemporaryDirectory() as cwd:
         for name, data in files.items():
             (Path(cwd) / name).write_bytes(data)
+        # Don't use --permission-mode bypassPermissions: it implies --dangerously-skip-permissions,
+        # which the CLI refuses to honor when running as root (Render free tier IS root).
+        # Whitelist only the read-only tools we actually need so default-mode runs without prompts.
         cmd = [
             claude_bin,
             "-p", combined,
             "--output-format", "json",
             "--model", model_id(),
-            "--permission-mode", "bypassPermissions",
+            "--allowedTools", "Read,Glob,Grep",
         ]
         try:
             result = subprocess.run(

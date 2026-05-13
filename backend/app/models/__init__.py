@@ -1,3 +1,4 @@
+from app.models.ai_solution import AiSolution
 from app.models.assignment import Assignment, AssignmentGroup
 from app.models.course import Course
 from app.models.module import Module, ModuleItem
@@ -13,4 +14,5 @@ __all__ = [
     "Assignment",
     "Submission",
     "Grade",
+    "AiSolution",
 ]

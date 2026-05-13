@@ -1,4 +1,8 @@
-# Render blueprint: one Docker Web Service (the API) + one Docker Cron Job (the hourly tick).
+# Render blueprint: a Docker Web Service (the API).
+# The hourly /api/cron/tick is fired by the GitHub Actions workflow `.github/workflows/cron-tick.yml`
+# rather than a Render Cron Job — Render's Cron service isn't on the free plan, and the GH Actions
+# scheduler is free. If you ever upgrade to a paid Render plan and want a colocated cron, add a
+# second service block (type: cron, plan: starter, schedule: "0 * * * *", dockerCommand: >- curl …).
 # Secrets are NOT committed — `sync: false` means "set this in the Render dashboard".
 services:
   - type: web
@@ -44,23 +48,3 @@ services:
         value: "true"
       - key: COOKIE_SAMESITE
         value: none
-
-  - type: cron
-    name: ocw-canvas-tick
-    runtime: docker
-    repo: https://github.com/dafu-zhu/ocw-canvas
-    dockerfilePath: backend/Dockerfile
-    dockerContext: backend
-    plan: free
-    schedule: "0 * * * *"
-    # YAML block scalar — keeps the colon in the X-Cron-Secret header from confusing the parser.
-    dockerCommand: >-
-      sh -c 'curl -fsS -X POST "$SELF_URL/api/cron/tick" -H "X-Cron-Secret: $CRON_SECRET"'
-    envVars:
-      - key: SELF_URL
-        sync: false  # the web service's public URL, e.g. https://ocw-canvas-api.onrender.com
-      - key: CRON_SECRET
-        fromService:
-          name: ocw-canvas-api
-          type: web
-          envVarKey: CRON_SECRET

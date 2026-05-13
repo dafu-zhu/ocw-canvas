@@ -527,3 +527,62 @@ table.data th {
   color: #b45309;
   border: 1px solid #b45309;
 }
+
+/* ---- P5 polish ---- */
+table.data tbody tr:nth-child(even) td {
+  background: #fafbfc;
+}
+table.data td:last-child,
+table.data th:last-child {
+  text-align: right;
+}
+
+/* Narrow screens: stack the page+sidebar, collapse the course nav into the flow. */
+@media (max-width: 900px) {
+  .page-with-sidebar {
+    flex-direction: column;
+  }
+  .page-with-sidebar .col-side {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+  .content-wrap {
+    flex-direction: column;
+  }
+  .course-nav {
+    width: 100%;
+    flex: 1 1 auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .course-nav .term {
+    width: 100%;
+  }
+}
+
+/* Print (the Grades page's "Print Grades" button): just the content. */
+@media print {
+  .left-rail,
+  .course-nav,
+  .col-side,
+  .breadcrumb,
+  .row-actions,
+  .btn {
+    display: none !important;
+  }
+  .main,
+  .content,
+  .content-wrap,
+  .page-with-sidebar,
+  .col-main {
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  body {
+    background: #fff;
+  }
+}

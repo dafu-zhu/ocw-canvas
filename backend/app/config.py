@@ -31,12 +31,17 @@ class Settings(BaseSettings):
     claude_code_oauth_token: str = ""
     anthropic_api_key: str = ""
     ai_solution_generation_enabled: bool = True
+    ai_model: str = "claude-sonnet-4-6"
 
     # Email (used from P4 onward)
     resend_api_key: str = ""
+    owner_email_from: str = "onboarding@resend.dev"  # verified sender / Resend onboarding domain
 
     # Cron (used from P4 onward)
     cron_secret: str = "dev-cron-secret"
+
+    # Public base URL of the frontend (for links in emails)
+    frontend_base_url: str = "http://localhost:5173"
 
     @property
     def cors_origins(self) -> list[str]:

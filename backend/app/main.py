@@ -1,7 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import assignment_groups, auth, courses, module_items, modules
+from app.api import (
+    assignment_groups,
+    assignments,
+    auth,
+    courses,
+    files,
+    gradebook,
+    module_items,
+    modules,
+    submissions,
+)
 from app.config import get_settings
 
 settings = get_settings()
@@ -21,6 +31,10 @@ app.include_router(courses.router, prefix="/api")
 app.include_router(modules.router, prefix="/api")
 app.include_router(module_items.router, prefix="/api")
 app.include_router(assignment_groups.router, prefix="/api")
+app.include_router(assignments.router, prefix="/api")
+app.include_router(submissions.router, prefix="/api")
+app.include_router(gradebook.router, prefix="/api")
+app.include_router(files.router, prefix="/api")
 
 
 @app.get("/api/health")

@@ -17,6 +17,9 @@ dist/
 *.db
 *.db-journal
 
+# Local file-storage fallback
+backend/_local_storage/
+
 # Env / secrets
 .env
 .env.*

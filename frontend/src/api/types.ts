@@ -69,3 +69,93 @@ export interface CourseDetail extends Course {
   assignment_groups: AssignmentGroup[];
   assignments: AssignmentSummary[];
 }
+
+export type LatePolicy = "none" | "flag_only" | "percent_per_day";
+
+export interface Assignment {
+  id: string;
+  course_id: string;
+  assignment_group_id: string | null;
+  title: string;
+  description_md: string;
+  points_possible: number;
+  due_at: string | null;
+  available_at: string | null;
+  accepts_files: boolean;
+  accepts_text: boolean;
+  official_solution_url: string;
+  official_solution_file_path: string;
+  late_policy: LatePolicy;
+  late_value: number | null;
+  position: number;
+  published: boolean;
+}
+
+export interface RubricItem {
+  criterion: string;
+  points_awarded: number;
+  points_possible: number;
+  note: string;
+}
+
+export interface Grade {
+  id: string;
+  submission_id: string;
+  score: number;
+  score_out_of: number;
+  late_penalty_applied: number;
+  final_score: number;
+  percentage: number;
+  feedback_md: string;
+  rubric_breakdown: RubricItem[];
+  graded_by: string;
+  model: string;
+  graded_at: string | null;
+}
+
+export interface Submission {
+  id: string;
+  assignment_id: string;
+  attempt_number: number;
+  submitted_at: string | null;
+  is_late: boolean;
+  text_body: string | null;
+  file_paths: string[];
+  source: string;
+  status: string;
+  grade: Grade | null;
+}
+
+export interface AssignmentDetail extends Assignment {
+  submissions: Submission[];
+}
+
+export interface GradebookRow {
+  assignment_id: string;
+  title: string;
+  group_name: string;
+  points_possible: number;
+  due_at: string | null;
+  submitted_at: string | null;
+  status: string;
+  score: number | null;
+  feedback_md: string;
+  rubric_breakdown: RubricItem[];
+}
+
+export interface GradebookGroup {
+  name: string;
+  weight: number | null;
+  drop_lowest_n: number;
+  percentage: number | null;
+  earned: number;
+  possible: number;
+}
+
+export interface Gradebook {
+  course_id: string;
+  rows: GradebookRow[];
+  groups: GradebookGroup[];
+  total_percentage: number | null;
+  only_graded: boolean;
+}

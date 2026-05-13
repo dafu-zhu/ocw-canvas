@@ -5,15 +5,40 @@ import type { Course } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { AppLayout } from "../components/AppLayout";
 import { Spinner } from "../components/Spinner";
+import { TodoList } from "../components/TodoList";
+import type { TodoEntry } from "../components/TodoList";
 import { CourseEditModal } from "../components/edit/CourseEditModal";
 
 export function DashboardPage() {
   const { teacherMode } = useAuth();
   const [courses, setCourses] = useState<Course[] | null>(null);
+  const [todo, setTodo] = useState<TodoEntry[]>([]);
   const [editing, setEditing] = useState<Course | "new" | null>(null);
 
   function reload() {
-    api.listCourses().then(setCourses);
+    api.listCourses().then(async (cs) => {
+      setCourses(cs);
+      const details = await Promise.all(cs.map((c) => api.getCourse(c.id).catch(() => null)));
+      const now = Date.now();
+      const entries: TodoEntry[] = [];
+      for (const d of details) {
+        if (!d) continue;
+        for (const a of d.assignments) {
+          if (a.published && a.due_at && new Date(a.due_at).getTime() > now) {
+            entries.push({
+              key: `${d.id}:${a.id}`,
+              title: a.title,
+              to: `/courses/${d.id}/assignments/${a.id}`,
+              courseName: `${d.code} ${d.title}`,
+              points: a.points_possible,
+              dueAt: a.due_at,
+            });
+          }
+        }
+      }
+      entries.sort((x, y) => new Date(x.dueAt!).getTime() - new Date(y.dueAt!).getTime());
+      setTodo(entries.slice(0, 8));
+    });
   }
   useEffect(reload, []);
 
@@ -74,9 +99,10 @@ export function DashboardPage() {
           <div className="col-side">
             <div className="widget">
               <h2>To Do</h2>
-              <div className="muted" style={{ fontSize: 13 }}>
-                Upcoming assignment deadlines will appear here.
-              </div>
+              <TodoList entries={todo} empty="No upcoming deadlines." />
+              <Link className="btn small" to="/calendar" style={{ marginTop: 8 }}>
+                Show All
+              </Link>
             </div>
             <div className="widget">
               <h2>Recent Feedback</h2>

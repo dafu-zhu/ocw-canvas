@@ -1,0 +1,19 @@
+name: Hourly cron tick
+on:
+  schedule:
+    - cron: "0 * * * *"   # every hour, on the hour (UTC)
+  workflow_dispatch:
+
+# Hits the backend's POST /api/cron/tick (deadline reminders + stuck-AI-job re-drives).
+# Use this if your host has no built-in cron (Render Cron Jobs aren't on the free plan).
+# Required repo secrets (Settings → Secrets and variables → Actions → Secrets):
+#   BACKEND_URL  — e.g. https://ocw-canvas-api.onrender.com  (no trailing slash)
+#   CRON_SECRET  — must match the backend's CRON_SECRET env var
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/cron/tick
+        run: |
+          curl -fsS -X POST "${{ secrets.BACKEND_URL }}/api/cron/tick" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"

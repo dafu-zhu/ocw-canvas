@@ -19,7 +19,14 @@ def _normalize_db_url(url: str) -> str:
 
 
 DATABASE_URL = _normalize_db_url(settings.database_url)
-_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+if DATABASE_URL.startswith("sqlite"):
+    _connect_args: dict = {"check_same_thread": False}
+elif "+psycopg" in DATABASE_URL:
+    # Disable client-side prepared statements so we work behind a transaction-mode pooler
+    # (e.g. Supabase Supavisor on port 6543). Harmless on direct connections / session pooler.
+    _connect_args = {"prepare_threshold": None}
+else:
+    _connect_args = {}
 engine = create_engine(
     DATABASE_URL, connect_args=_connect_args, future=True, pool_pre_ping=True
 )

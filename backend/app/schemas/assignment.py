@@ -70,3 +70,23 @@ class SubmissionOut(ORMModel):
 
 class AssignmentDetailOut(AssignmentOut):
     submissions: list[SubmissionOut] = []
+
+
+class AiSolutionOut(ORMModel):
+    id: str
+    assignment_id: str
+    status: str  # pending | generating | ready | failed
+    content_md: str
+    model: str
+    prompt_log_path: str
+    generated_at: datetime | None = None
+    error: str
+
+
+class SolutionInfoOut(ORMModel):
+    assignment_id: str
+    key_kind: str  # official_url | official_file | ai | none
+    official_solution_url: str
+    ai_available: bool
+    generation_available: bool
+    ai_solution: AiSolutionOut | None = None

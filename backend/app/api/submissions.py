@@ -7,8 +7,7 @@ from app.auth import get_current_user
 from app.db import get_db
 from app.models import Assignment, Grade, Submission
 from app.schemas.assignment import GradeOut, SubmissionOut
-from app.services import storage
-from app.services.grading import apply_late_penalty, days_late
+from app.services import ai_jobs, storage
 
 router = APIRouter(tags=["submissions"], dependencies=[Depends(get_current_user)])
 
@@ -65,6 +64,11 @@ async def create_submission(
     sub.file_paths = paths
     db.commit()
     db.refresh(sub)
+    # If a solution key already exists, kick off AI grading immediately. The submission is
+    # already saved, so a model failure must never 500 the submit — ai_jobs never raises.
+    if ai_jobs.has_key(db, a):
+        ai_jobs.grade_with_ai(db, sub.id)
+        db.refresh(sub)
     return sub
 
 
@@ -89,30 +93,7 @@ def manual_grade(
     if sub is None:
         raise HTTPException(404, "submission not found")
     a = db.get(Assignment, sub.assignment_id)
-    points = float(a.points_possible)
-    due, submitted_at = _aware(a.due_at), _aware(sub.submitted_at)
-    dl = days_late(due, submitted_at) if (due and submitted_at) else 0
-    _, penalty = apply_late_penalty(
-        score=score,
-        points=points,
-        is_late=sub.is_late,
-        policy=a.late_policy,
-        value=float(a.late_value) if a.late_value is not None else None,
-        days_late=dl,
-    )
-    final = max(0.0, score - penalty)
-    g = sub.grade or Grade(submission_id=sub.id)
-    g.score = score
-    g.score_out_of = points
-    g.late_penalty_applied = penalty
-    g.final_score = final
-    g.percentage = (final / points * 100.0) if points else 0.0
-    g.feedback_md = feedback_md
-    g.graded_by = "manual"
-    g.graded_at = datetime.now(UTC)
-    if sub.grade is None:
-        db.add(g)
-    sub.status = "graded"
+    g = ai_jobs.record_grade(db, sub, a, score=score, feedback_md=feedback_md, graded_by="manual")
     db.commit()
     db.refresh(g)
     return g

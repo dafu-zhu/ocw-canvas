@@ -50,6 +50,41 @@ def apply_late_penalty(
     return score, 0.0
 
 
+def days_late_between(due_at: datetime | None, submitted_at: datetime | None) -> int:
+    """``days_late`` but tolerant of None and of SQLite's naive datetimes (assumed UTC)."""
+    if due_at is None or submitted_at is None:
+        return 0
+    if due_at.tzinfo is None and submitted_at.tzinfo is not None:
+        from datetime import UTC
+
+        due_at = due_at.replace(tzinfo=UTC)
+    elif submitted_at.tzinfo is None and due_at.tzinfo is not None:
+        from datetime import UTC
+
+        submitted_at = submitted_at.replace(tzinfo=UTC)
+    return days_late(due_at, submitted_at)
+
+
+def finalize_score(
+    *,
+    score: float,
+    points: float,
+    is_late: bool,
+    policy: str,
+    value: float | None,
+    days_late: int = 0,
+) -> tuple[float, float, float]:
+    """The single late-penalty/finalisation path used by both manual and AI grading.
+
+    Returns ``(penalty_points, final_score, percentage)``."""
+    _, penalty = apply_late_penalty(
+        score=score, points=points, is_late=is_late, policy=policy, value=value, days_late=days_late
+    )
+    final = max(0.0, score - penalty)
+    pct = (final / points * 100.0) if points else 0.0
+    return penalty, final, pct
+
+
 def group_percentage(rows: list[GradeRow], drop_lowest_n: int) -> float | None:
     """Σ final_score / Σ points over graded rows, after dropping the N lowest by percentage.
     None if there are no graded rows (or all get dropped)."""

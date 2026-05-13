@@ -8,6 +8,7 @@ from app.db import Base
 from app.models.base import TimestampMixin, _uuid
 
 if TYPE_CHECKING:
+    from app.models.ai_solution import AiSolution
     from app.models.course import Course
     from app.models.submission import Submission
 
@@ -61,4 +62,7 @@ class Assignment(Base, TimestampMixin):
         back_populates="assignment",
         cascade="all, delete-orphan",
         order_by="Submission.attempt_number",
+    )
+    ai_solution: Mapped["AiSolution | None"] = relationship(
+        back_populates="assignment", uselist=False, cascade="all, delete-orphan"
     )

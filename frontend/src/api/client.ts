@@ -1,4 +1,5 @@
 import type {
+  AiSolution,
   Assignment,
   AssignmentDetail,
   AssignmentGroup,
@@ -8,6 +9,7 @@ import type {
   Gradebook,
   Module,
   ModuleItem,
+  SolutionInfo,
   Submission,
   User,
 } from "./types";
@@ -109,4 +111,11 @@ export const api = {
   // gradebook
   getGradebook: (courseId: string, onlyGraded = true) =>
     req<Gradebook>("GET", `/courses/${courseId}/gradebook?only_graded=${onlyGraded}`),
+
+  // AI
+  getSolution: (assignmentId: string) =>
+    req<SolutionInfo>("GET", `/assignments/${assignmentId}/solution`),
+  generateSolution: (assignmentId: string) =>
+    req<AiSolution>("POST", `/assignments/${assignmentId}/generate-solution`),
+  regrade: (submissionId: string) => req<Grade>("POST", `/submissions/${submissionId}/regrade`),
 };

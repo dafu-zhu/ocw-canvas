@@ -159,3 +159,25 @@ export interface Gradebook {
   total_percentage: number | null;
   only_graded: boolean;
 }
+
+export type AiSolutionStatus = "pending" | "generating" | "ready" | "failed";
+
+export interface AiSolution {
+  id: string;
+  assignment_id: string;
+  status: AiSolutionStatus;
+  content_md: string;
+  model: string;
+  prompt_log_path: string;
+  generated_at: string | null;
+  error: string;
+}
+
+export interface SolutionInfo {
+  assignment_id: string;
+  key_kind: "official_url" | "official_file" | "ai" | "none";
+  official_solution_url: string;
+  ai_available: boolean;
+  generation_available: boolean;
+  ai_solution: AiSolution | null;
+}

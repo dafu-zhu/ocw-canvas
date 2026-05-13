@@ -53,7 +53,9 @@ services:
     dockerContext: backend
     plan: free
     schedule: "0 * * * *"
-    dockerCommand: sh -c 'curl -fsS -X POST "$SELF_URL/api/cron/tick" -H "X-Cron-Secret: $CRON_SECRET"'
+    # YAML block scalar — keeps the colon in the X-Cron-Secret header from confusing the parser.
+    dockerCommand: >-
+      sh -c 'curl -fsS -X POST "$SELF_URL/api/cron/tick" -H "X-Cron-Secret: $CRON_SECRET"'
     envVars:
       - key: SELF_URL
         sync: false  # the web service's public URL, e.g. https://ocw-canvas-api.onrender.com

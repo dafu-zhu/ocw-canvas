@@ -35,7 +35,10 @@ def test_assignment_belongs_to_group_and_course(db):
     db.add(group)
     db.flush()
     a = Assignment(
-        course_id=course.id, assignment_group_id=group.id, title="Problem Set 1", points_possible=100
+        course_id=course.id,
+        assignment_group_id=group.id,
+        title="Problem Set 1",
+        points_possible=100,
     )
     db.add(a)
     db.commit()

@@ -45,9 +45,30 @@ Other knobs: `AI_MODEL` (default `claude-sonnet-4-6`). Solution generation runs 
 assignment (cached on `ai_solution`); grading runs once per submission attempt. Prompt+response
 transcripts are written to Storage (`solutions/logs/...`) and the path stored on the row.
 
+## Email & cron (P4+)
+
+Outbound email goes through Resend (`app/services/email.py`). Set `RESEND_API_KEY` and
+`OWNER_EMAIL_FROM` (a verified sender, or Resend's `onboarding@resend.dev` to start). If
+`RESEND_API_KEY` is unset the app still runs — emails are skipped but an `email_log` row is
+written recording the intent. Three templates: graded results, deadline reminders, password reset.
+Every graded submission (AI or manual) also creates an in-app `announcement`; the Announcements
+page mirrors them and the Inbox rail icon shows an unread count.
+
+`POST /api/cron/tick` is the hourly job. It is **not** behind the login cookie — it's guarded by
+an `X-Cron-Secret: <CRON_SECRET>` header (wrong/missing → 403). It (1) sends 48h/24h deadline
+reminders for published, dated, unsubmitted assignments — idempotently, via `cron_marker` rows
+keyed `deadline-<48|24>h:<assignment_id>` — and (2) re-drives stalled AI work (solutions stuck
+`generating`/`failed` with `attempts<3`; submissions that are `submitted` and now have a key;
+submissions stuck `grading`). Running it twice produces no duplicate emails/announcements.
+
+Password reset: `POST /api/auth/forgot-password {email}` → emails a one-hour signed token →
+`POST /api/auth/reset-password {token, new_password}` sets the password and logs in.
+
 ## Docker / deploy
 
 `Dockerfile` builds a Python 3.12 + Node image (Node is only needed for the OAuth/Agent-SDK path).
-It runs `alembic upgrade head` then `uvicorn`. Set the env vars (`DATABASE_URL`, `SUPABASE_*`,
-the AI credential, `RESEND_API_KEY`, `JWT_SECRET`, `CRON_SECRET`, `FRONTEND_ORIGIN`, …) in the
-host dashboard.
+It runs `alembic upgrade head` then `uvicorn`. `render.yaml` declares a Docker **Web Service** and
+a Docker **Cron Job** (`schedule: "0 * * * *"`, curls `/api/cron/tick` with the shared secret).
+Set the dashboard env vars: `DATABASE_URL`, `SUPABASE_*`, one AI credential, `RESEND_API_KEY`,
+`OWNER_EMAIL`, `OWNER_EMAIL_FROM`, `JWT_SECRET`, `CRON_SECRET`, `FRONTEND_ORIGINS`,
+`FRONTEND_BASE_URL`, and `SELF_URL` (on the cron job).

@@ -1,0 +1,64 @@
+# Render blueprint: one Docker Web Service (the API) + one Docker Cron Job (the hourly tick).
+# Secrets are NOT committed — `sync: false` means "set this in the Render dashboard".
+services:
+  - type: web
+    name: ocw-canvas-api
+    runtime: docker
+    repo: https://github.com/dafu-zhu/ocw-canvas
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      # Use ONE of these two:
+      - key: CLAUDE_CODE_OAUTH_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AI_SOLUTION_GENERATION_ENABLED
+        value: "true"
+      - key: AI_MODEL
+        value: claude-sonnet-4-6
+      - key: RESEND_API_KEY
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_EMAIL_FROM
+        value: onboarding@resend.dev
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGINS
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: none
+
+  - type: cron
+    name: ocw-canvas-tick
+    runtime: docker
+    repo: https://github.com/dafu-zhu/ocw-canvas
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    schedule: "0 * * * *"
+    dockerCommand: sh -c 'curl -fsS -X POST "$SELF_URL/api/cron/tick" -H "X-Cron-Secret: $CRON_SECRET"'
+    envVars:
+      - key: SELF_URL
+        sync: false  # the web service's public URL, e.g. https://ocw-canvas-api.onrender.com
+      - key: CRON_SECRET
+        fromService:
+          name: ocw-canvas-api
+          type: web
+          envVarKey: CRON_SECRET

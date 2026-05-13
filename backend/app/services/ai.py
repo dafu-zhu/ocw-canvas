@@ -227,46 +227,74 @@ def _describe_exc(exc: BaseException) -> str:
 def _invoke_agent_sdk(
     system_prompt: str, user_prompt: str, files: dict[str, bytes]
 ) -> tuple[str, str]:
-    import asyncio
+    """Shell out to the Claude Code CLI directly (don't use the streaming SDK).
+
+    The Python ``claude-agent-sdk`` wraps the CLI in stream-json mode, which on Render's
+    minimal container swallows stderr and produces an opaque ``ProcessError``. The CLI's
+    plain ``-p ... --output-format json`` mode is simpler, version-stable, and lets us
+    capture stderr cleanly with ``subprocess.run``.
+    """
+    import json as _json
+    import os
     import shutil
+    import subprocess
     import tempfile
     from pathlib import Path
 
-    from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore
+    claude_bin = shutil.which("claude")
+    if claude_bin is None:
+        raise RuntimeError("claude CLI not found on PATH")
 
-    # Diagnostic prefix on any failure — proves whether the CLI is even on PATH.
-    claude_bin = shutil.which("claude") or "(claude not on PATH)"
+    env = {**os.environ}
+    # The CLI caches config under $HOME; default to /tmp so it works on read-only-ish FSes.
+    env["HOME"] = env.get("HOME") or "/tmp"
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = _settings.claude_code_oauth_token
+    # Belt + suspenders against interactive-only paths.
+    env.setdefault("CI", "1")
+    env.setdefault("DISABLE_AUTOUPDATER", "1")
 
-    async def _run() -> str:
-        with tempfile.TemporaryDirectory() as cwd:
-            for name, data in files.items():
-                (Path(cwd) / name).write_bytes(data)
-            opts = ClaudeAgentOptions(
-                system_prompt=system_prompt,
-                cwd=cwd,
-                permission_mode="bypassPermissions",
-                allowed_tools=["Read", "Glob", "Grep"],
-                model=model_id(),
+    # Fold the system prompt into the user message so we don't depend on a specific CLI
+    # flag spelling (`--system-prompt` vs `--append-system-prompt` differs across versions).
+    combined = f"{system_prompt}\n\n---\n\n{user_prompt}"
+
+    with tempfile.TemporaryDirectory() as cwd:
+        for name, data in files.items():
+            (Path(cwd) / name).write_bytes(data)
+        cmd = [
+            claude_bin,
+            "-p", combined,
+            "--output-format", "json",
+            "--model", model_id(),
+            "--permission-mode", "bypassPermissions",
+        ]
+        try:
+            result = subprocess.run(
+                cmd, cwd=cwd, env=env, capture_output=True, text=True, timeout=300
             )
-            chunks: list[str] = []
-            async for message in query(prompt=user_prompt, options=opts):
-                text = getattr(message, "result", None) or getattr(message, "text", None)
-                if isinstance(text, str):
-                    chunks.append(text)
-                else:
-                    content = getattr(message, "content", None)
-                    if isinstance(content, list):
-                        for block in content:
-                            bt = getattr(block, "text", None)
-                            if isinstance(bt, str):
-                                chunks.append(bt)
-            return chunks[-1] if chunks else ""
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"claude CLI timed out after 300s (claude={claude_bin})"
+            ) from exc
 
-    try:
-        out = asyncio.run(_run())
-    except Exception as exc:
-        msg = f"agent_sdk path failed (claude={claude_bin}) :: {_describe_exc(exc)}"
-        raise RuntimeError(msg) from exc
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip() or "(no stderr)"
+            stdout = (result.stdout or "").strip()
+            stdout_excerpt = (stdout[:300] + "…") if len(stdout) > 300 else stdout
+            raise RuntimeError(
+                f"claude CLI exited {result.returncode} (bin={claude_bin}) | "
+                f"stderr={stderr} | stdout={stdout_excerpt or '(empty)'}"
+            )
+
+        # CLI's --output-format json emits `{"result": "...", "session_id": ..., ...}`.
+        # Fall back to raw stdout if parsing fails.
+        try:
+            parsed = _json.loads(result.stdout)
+            out = parsed.get("result")
+            if not isinstance(out, str) or not out.strip():
+                out = result.stdout
+        except _json.JSONDecodeError:
+            out = result.stdout
+
     transcript = (
         f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_prompt}\n\n"
         f"(files: {sorted(files)})\n\n=== RESPONSE ===\n{out}\n"

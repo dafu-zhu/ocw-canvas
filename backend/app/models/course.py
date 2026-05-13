@@ -9,6 +9,7 @@ from app.models.base import TimestampMixin, _uuid
 if TYPE_CHECKING:
     from app.models.assignment import Assignment, AssignmentGroup
     from app.models.module import Module
+    from app.models.notifications import Announcement
 
 
 class Course(Base, TimestampMixin):
@@ -42,4 +43,7 @@ class Course(Base, TimestampMixin):
         back_populates="course",
         cascade="all, delete-orphan",
         order_by="Assignment.position",
+    )
+    announcements: Mapped[list["Announcement"]] = relationship(
+        back_populates="course", cascade="all, delete-orphan"
     )

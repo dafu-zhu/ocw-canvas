@@ -26,7 +26,7 @@ class Announcement(Base, TimestampMixin):
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    course: Mapped["Course | None"] = relationship()
+    course: Mapped["Course | None"] = relationship(back_populates="announcements")
 
 
 class EmailLog(Base, TimestampMixin):
@@ -47,5 +47,6 @@ class EmailLog(Base, TimestampMixin):
 class CronMarker(Base):
     __tablename__ = "cron_marker"
 
-    key: Mapped[str] = mapped_column(String(200), primary_key=True)  # "deadline-48h:<assignment_id>"
+    # e.g. "deadline-48h:<assignment_id>" — presence ⇒ already handled, don't repeat.
+    key: Mapped[str] = mapped_column(String(200), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

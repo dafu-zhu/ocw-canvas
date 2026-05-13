@@ -3,10 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     ai,
+    announcements,
     assignment_groups,
     assignments,
     auth,
     courses,
+    cron,
     files,
     gradebook,
     module_items,
@@ -36,6 +38,8 @@ app.include_router(assignments.router, prefix="/api")
 app.include_router(submissions.router, prefix="/api")
 app.include_router(gradebook.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
+app.include_router(announcements.router, prefix="/api")
+app.include_router(cron.router, prefix="/api")
 app.include_router(files.router, prefix="/api")
 
 

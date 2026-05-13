@@ -6,8 +6,8 @@ import { AssignmentDetailPage } from "./pages/AssignmentDetailPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { CourseAssignmentsPage } from "./pages/CourseAssignmentsPage";
 import { CourseHomePage } from "./pages/CourseHomePage";
+import { CourseGradesPage } from "./pages/CourseGradesPage";
 import { CourseModulesPage } from "./pages/CourseModulesPage";
-import { CoursePlaceholderPage } from "./pages/CoursePlaceholderPage";
 import { CourseSyllabusPage } from "./pages/CourseSyllabusPage";
 import { CourseVideosPage } from "./pages/CourseVideosPage";
 import { CoursesListPage } from "./pages/CoursesListPage";
@@ -40,7 +40,7 @@ export default function App() {
       />
       <Route
         path="/courses/:courseId/grades"
-        element={<Auth><CoursePlaceholderPage section="Grades" /></Auth>}
+        element={<Auth><CourseGradesPage /></Auth>}
       />
       <Route path="/courses/:courseId/announcements" element={<Auth><AnnouncementsPage /></Auth>} />
       <Route path="*" element={<Navigate to="/" replace />} />

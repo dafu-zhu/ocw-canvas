@@ -7,7 +7,7 @@ import type {
   User,
 } from "./types";
 
-const BASE = import.meta.env.VITE_API_BASE_URL.replace(/\/$/, "");
+const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(

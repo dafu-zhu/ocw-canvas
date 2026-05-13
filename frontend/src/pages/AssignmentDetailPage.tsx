@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, apiBase } from "../api/client";
-import type { AssignmentDetail } from "../api/types";
+import type { AssignmentDetail, SolutionInfo } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { CourseLayout } from "../components/CourseLayout";
 import { Markdown } from "../components/Markdown";
@@ -13,19 +13,24 @@ export function AssignmentDetailPage() {
   const { course } = useCourse(courseId);
   const { teacherMode } = useAuth();
   const [a, setA] = useState<AssignmentDetail | null>(null);
+  const [info, setInfo] = useState<SolutionInfo | null>(null);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
   const [showRef, setShowRef] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reloadA() {
-    if (assignmentId) api.getAssignment(assignmentId).then(setA);
+    if (!assignmentId) return;
+    api.getAssignment(assignmentId).then(setA);
+    api.getSolution(assignmentId).then(setInfo);
   }
   useEffect(reloadA, [assignmentId]);
 
-  if (!course || !a) return <Spinner />;
+  if (!course || !a || !info) return <Spinner />;
   const latest = a.submissions[a.submissions.length - 1];
+  const noKey = info.key_kind === "none";
 
   async function submit() {
     setBusy(true);
@@ -37,6 +42,16 @@ export function AssignmentDetailPage() {
       reloadA();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function generateSolution() {
+    setGenBusy(true);
+    try {
+      await api.generateSolution(a!.id);
+      reloadA();
+    } finally {
+      setGenBusy(false);
     }
   }
 
@@ -65,6 +80,12 @@ export function AssignmentDetailPage() {
       <h2 style={{ fontWeight: 400 }}>
         {latest && latest.status === "graded" ? "Resubmit" : "Submit"}
       </h2>
+      {noKey && (
+        <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
+          No solution key yet — your submission will be recorded and graded once a key is attached
+          {info.generation_available ? " or the AI solution is generated" : ""}.
+        </div>
+      )}
       {a.accepts_text && (
         <>
           <label className="muted">Text / LaTeX</label>
@@ -133,6 +154,10 @@ export function AssignmentDetailPage() {
                       {s.grade.late_penalty_applied > 0 && (
                         <span className="muted"> (late penalty −{s.grade.late_penalty_applied})</span>
                       )}
+                      <span className="muted" style={{ marginLeft: 8 }}>
+                        graded by {s.grade.graded_by}
+                        {s.grade.model ? ` (${s.grade.model})` : ""}
+                      </span>
                       {s.grade.rubric_breakdown.length > 0 && (
                         <table className="data" style={{ marginTop: 8 }}>
                           <thead>
@@ -163,10 +188,24 @@ export function AssignmentDetailPage() {
                     </div>
                   ) : (
                     <div className="muted" style={{ marginTop: 8 }}>
-                      {s.status === "submitted" ? "Submitted — not yet graded." : s.status}
+                      {s.status === "submitted"
+                        ? noKey
+                          ? "Submitted — awaiting a solution key before autograding."
+                          : "Submitted — not yet graded."
+                        : s.status === "grading"
+                          ? "Grading…"
+                          : s.status === "grading_failed"
+                            ? "Grading failed."
+                            : s.status}
                     </div>
                   )}
-                  {teacherMode && <ManualGradeForm submissionId={s.id} onGraded={reloadA} />}
+                  {teacherMode && (
+                    <SubmissionTeacherActions
+                      submissionId={s.id}
+                      hasKey={!noKey}
+                      onChanged={reloadA}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -179,20 +218,54 @@ export function AssignmentDetailPage() {
         <button className="btn" onClick={() => setShowRef(!showRef)}>
           {showRef ? "Hide" : "View"} reference solution
         </button>
+        {teacherMode && info.ai_solution?.status !== "ready" && (
+          <button
+            className="btn"
+            style={{ marginLeft: 8 }}
+            disabled={genBusy || !info.generation_available}
+            onClick={generateSolution}
+            title={
+              info.generation_available
+                ? ""
+                : "AI solution generation is disabled (no credential / flag off)"
+            }
+          >
+            {genBusy ? "Generating…" : "Generate AI solution"}
+          </button>
+        )}
         {showRef && (
           <div style={{ marginTop: 10 }}>
-            {a.official_solution_url ? (
+            {info.official_solution_url ? (
               <a
-                href={a.official_solution_url}
+                href={info.official_solution_url}
                 target="_blank"
                 rel="noreferrer"
                 className="external-arrow"
               >
                 Official solution
               </a>
+            ) : info.ai_solution?.status === "ready" ? (
+              <Markdown>{info.ai_solution.content_md}</Markdown>
+            ) : info.ai_solution?.status === "generating" ? (
+              <span className="muted">Generating the reference solution…</span>
+            ) : info.ai_solution?.status === "failed" ? (
+              <span className="muted">
+                Solution generation failed: {info.ai_solution.error}
+                {teacherMode && info.generation_available && (
+                  <button
+                    className="btn small"
+                    style={{ marginLeft: 8 }}
+                    disabled={genBusy}
+                    onClick={generateSolution}
+                  >
+                    Retry
+                  </button>
+                )}
+              </span>
             ) : (
               <span className="muted">
-                No solution available yet. (AI-generated solutions arrive in a later phase.)
+                No solution available yet
+                {info.generation_available ? " — generate it above" : ""}.
               </span>
             )}
           </div>
@@ -202,19 +275,22 @@ export function AssignmentDetailPage() {
   );
 }
 
-function ManualGradeForm({
+function SubmissionTeacherActions({
   submissionId,
-  onGraded,
+  hasKey,
+  onChanged,
 }: {
   submissionId: string;
-  onGraded: () => void;
+  hasKey: boolean;
+  onChanged: () => void;
 }) {
   const [score, setScore] = useState("");
   const [fb, setFb] = useState("");
+  const [busy, setBusy] = useState(false);
   return (
     <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 10 }}>
-      <strong>Teacher: manual grade</strong>
-      <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
+      <strong>Teacher</strong>
+      <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
         <input
           style={{ width: 80 }}
           placeholder="score"
@@ -222,19 +298,43 @@ function ManualGradeForm({
           onChange={(e) => setScore(e.target.value)}
         />
         <input
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 160 }}
           placeholder="feedback (markdown)"
           value={fb}
           onChange={(e) => setFb(e.target.value)}
         />
         <button
-          className="btn small primary"
+          className="btn small"
+          disabled={busy || score === ""}
           onClick={async () => {
-            await api.manualGrade(submissionId, Number(score), fb);
-            onGraded();
+            setBusy(true);
+            try {
+              await api.manualGrade(submissionId, Number(score), fb);
+              onChanged();
+            } finally {
+              setBusy(false);
+            }
           }}
         >
-          Save grade
+          Save manual grade
+        </button>
+        <button
+          className="btn small primary"
+          disabled={busy || !hasKey}
+          title={hasKey ? "" : "no solution key — attach one or generate the AI solution first"}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await api.regrade(submissionId);
+              onChanged();
+            } catch (e) {
+              alert(String(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Re-grade with AI
         </button>
       </div>
     </div>

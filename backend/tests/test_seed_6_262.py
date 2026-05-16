@@ -1,3 +1,4 @@
+import httpx
 import pytest
 
 from app.models import Course
@@ -46,7 +47,6 @@ def test_resolve_pdf_url_finds_hash_prefixed_pdf(monkeypatch):
         captured["url"] = url
         return _Resp()
 
-    import httpx
     monkeypatch.setattr(httpx, "get", _fake_get)
 
     result = _resolve_pdf_url("mit6_262s11_assn01_sol")
@@ -57,16 +57,51 @@ def test_resolve_pdf_url_finds_hash_prefixed_pdf(monkeypatch):
     assert captured["url"].endswith("/resources/mit6_262s11_assn01_sol/")
 
 
+_MULTI_PDF_HTML = (
+    '<html><body>'
+    '<a href="/courses/6-262-discrete-stochastic-processes-spring-2011/'
+    'aaaa_MIT6_262S11_other_pdf.pdf">Other PDF</a>'
+    '<a href="/courses/6-262-discrete-stochastic-processes-spring-2011/'
+    'bbbb_MIT6_262S11_assn01_sol.pdf">Solution PDF</a>'
+    '</body></html>'
+)
+
+
+def test_resolve_pdf_url_picks_slug_matching_pdf(monkeypatch):
+    class _Resp:
+        text = _MULTI_PDF_HTML
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: _Resp())
+
+    result = _resolve_pdf_url("mit6_262s11_assn01_sol")
+    assert "MIT6_262S11_assn01_sol.pdf" in result
+    assert "other_pdf" not in result
+
+
 def test_resolve_pdf_url_raises_on_no_pdf(monkeypatch):
     class _Resp:
         text = "<html><body>No PDF here.</body></html>"
         def raise_for_status(self): pass
 
-    import httpx
     monkeypatch.setattr(httpx, "get", lambda url, **kw: _Resp())
 
-    with pytest.raises(RuntimeError, match="no PDF link"):
+    with pytest.raises(RuntimeError, match="no PDF link matching slug"):
         _resolve_pdf_url("mit6_262s11_assn01_sol")
+
+
+def test_resolve_pdf_url_propagates_http_errors(monkeypatch):
+    class _Resp:
+        text = ""
+        def raise_for_status(self):
+            request = httpx.Request("GET", "https://example.com")
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("404 Not Found", request=request, response=response)
+
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: _Resp())
+
+    with pytest.raises(httpx.HTTPStatusError):
+        _resolve_pdf_url("mit6_262s11_missing")
 
 
 def test_code_and_base():

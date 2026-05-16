@@ -74,7 +74,15 @@ export function CourseModulesPage() {
         </div>
       </div>
       {course.modules.length === 0 && <div className="center-empty">No modules yet.</div>}
-      {course.modules.map((m) => (
+      {course.modules.map((m) => {
+        // Per feedback-module-content-chapter-readings Rule 1: kind="video"
+        // items belong on the Video Lectures page, not in the Modules view.
+        // Teacher mode still sees everything so the items remain editable.
+        const visibleItems = teacherMode
+          ? m.items
+          : m.items.filter((it) => it.kind !== "video");
+        if (visibleItems.length === 0 && !teacherMode) return null;
+        return (
         <div className="module" key={m.id}>
           <div className="module-head" onClick={() => toggle(m.id)}>
             <span>{collapsed.has(m.id) ? "▸" : "▾"}</span>
@@ -97,7 +105,7 @@ export function CourseModulesPage() {
             )}
           </div>
           {!collapsed.has(m.id) &&
-            m.items.map((it) => (
+            visibleItems.map((it) => (
               <div
                 className={`module-item indent-${it.indent} ${it.kind === "header" ? "header-row" : ""}`}
                 key={it.id}
@@ -140,7 +148,8 @@ export function CourseModulesPage() {
               </div>
             ))}
         </div>
-      ))}
+        );
+      })}
 
       {editingModule && (
         <ModuleEditModal

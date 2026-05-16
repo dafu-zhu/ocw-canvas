@@ -86,6 +86,90 @@ def _project_topics_url() -> str:
     return f"{BASE}/resources/mit6_231f15_references/"
 
 
+def _resource_url(slug: str) -> str:
+    """OCW resource landing page for any ``mit6_231f15_*`` (or video) slug."""
+    return f"{BASE}/resources/{slug}/"
+
+
+# --------------------------------------------------------------------------- Related
+# OCW's "Related Video Lectures" page bundles a parallel resource:
+# Bertsekas's 6-lecture, 12-hour short course on Approximate DP, taught at
+# Tsinghua University in June 2014. The page also links 7 lecture-note PDFs
+# from a Summer 2012 short course. We mirror BOTH:
+#   - The slide PDFs (+ explanation) live in a new "Approximate DP —
+#     short-course notes" module under Modules.
+#   - The 18 video segments live as ``kind="video"`` items in a separate
+#     "Video Lectures — Tsinghua 2014" module so they surface on the
+#     Video Lectures page (and not in the Modules view — the frontend
+#     filters ``kind="video"`` out of CourseModulesPage).
+
+COMPLETE_SLIDES_SLUG = "mit6_231f15_complete_slide"
+
+# (lecture #, lecture title verbatim from OCW, slide-PDF slug, [video segment slugs])
+TSINGHUA_2014_LECTURES: list[tuple[int, str, str, list[str]]] = [
+    (1, "Introduction to Dynamic Programming",
+     "mit6_231f15_lec1-1",
+     ["approximate-dynamic-programming-lecture-1-part-1",
+      "approximate-dynamic-programming-lecture-1-part-2",
+      "approximate-dynamic-programming-lecture-1-part-3"]),
+    (2, "Review of Discounted Problem Theory",
+     "mit6_231f15_lec2-1",
+     ["approximate-dynamic-programming-lecture-2-part-1",
+      "approximate-dynamic-programming-lecture-2-part-2",
+      "approximate-dynamic-programming-lecture-2-part-3"]),
+    (3, "General Issues of Approximation and Simulation",
+     "mit6_231f15_lec3-1",
+     ["approximate-dynamic-programming-lecture-3-part-1",
+      "approximate-dynamic-programming-lecture-3-part-2"]),
+    (4, "Approximate Policy Iteration",
+     "mit6_231f15_lec4-1",
+     ["approximate-dynamic-programming-lecture-4-part-1",
+      "approximate-dynamic-programming-lecture-4-part-2"]),
+    (5, "Aggregation Methods",
+     "mit6_231f15_lec5-1",
+     ["approximate-dynamic-programming-lecture-5-part-1",
+      "approximate-dynamic-programming-lecture-5-part-2",
+      "approximate-dynamic-programming-lecture-5-part-3"]),
+    (6, "Q-Learning and Approximation in Policy Space",
+     "mit6_231f15_lec6-1",
+     ["approximate-dynamic-programming-lecture-6-part-1",
+      "approximate-dynamic-programming-lecture-6-part-2"]),
+]
+
+# (display title verbatim from OCW, resource slug). PDF-only, no videos.
+SUMMER_2012_NOTES: list[tuple[str, str]] = [
+    ("Short Course Notes (PDF)", "mit6_231f15_notes_short"),
+    ("Exact DP: Infinite Horizon Problems (PDF)", "mit6_231f15_lec01_short"),
+    ("Exact DP: Large-scale Computational Methods (PDF)", "mit6_231f15_lec02_short"),
+    ("General Issues of Approximation and Simulation (PDF)", "mit6_231f15_lec03_short"),
+    ("Temporal Differences (TD), Projected Equations, Galerkin Approximation (PDF)",
+     "mit6_231f15_lec04_short"),
+    ("Aggregation Methods (PDF)", "mit6_231f15_lec05_short"),
+    ("Stochastic Approximation, Q-learning, and Other Methods (PDF)",
+     "mit6_231f15_lec06_short"),
+    ("Monte Carlo Methods (PDF)", "mit6_231f15_lec07_short"),
+]
+
+RELATED_VIDEOS_INTRO_MD = """These materials are from a 6-lecture, 12-hour short course on
+**Approximate Dynamic Programming**, taught by Professor Dimitri P. Bertsekas
+at **Tsinghua University in Beijing, China in June 2014**. They focus primarily
+on the advanced research-oriented issues of large-scale infinite-horizon
+dynamic programming, which corresponds to **lectures 11–23 of the MIT 6.231
+course**.
+
+The complete set of lecture notes is available as the *Complete Slides*
+link below, and is also divided by lecture. Additional supporting material
+can be obtained on Prof. Bertsekas' web site.
+
+*Note to OCW users:* All videos are from Shuvomoy Das Gupta on YouTube and are
+**not provided under OCW's Creative Commons License**. They are surfaced on
+the **Video Lectures** page of this course.
+
+A second set of seven **Summer 2012 short-course** lecture notes (PDF only,
+no videos) is also linked at the bottom of this module.
+"""
+
+
 _PDF_HREF_RE = re.compile(r'href="(/courses/[^"]+\.pdf)"')
 
 
@@ -243,7 +327,7 @@ def _direct_links_items() -> list[dict]:
         {"kind": "link", "title": "Projects page", "url": PROJECTS_URL},
         {
             "kind": "link",
-            "title": "Related video lectures (Bertsekas 2014 ASU)",
+            "title": "Related video lectures (Bertsekas 2014 Tsinghua short course)",
             "url": RELATED_VIDEOS_URL,
         },
     ]
@@ -293,20 +377,108 @@ def _practice_midterms_items() -> list[dict]:
     return out
 
 
+def _related_short_course_notes_items() -> list[dict]:
+    """Module body for OCW's Related Video Lectures page — *slides only*.
+
+    Mirrors OCW: an explanation note at the top, the Complete Slides PDF,
+    six Tsinghua-2014 lecture-note PDFs (one per lecture, in OCW's order),
+    and the seven Summer 2012 lecture-note PDFs at the bottom.
+
+    The 18 video segments do NOT appear here — they live in the separate
+    "Video Lectures (Bertsekas 2014 Tsinghua)" module as ``kind="video"``
+    items so they only surface on the Video Lectures page.
+    """
+    items: list[dict] = [
+        {
+            "kind": "note",
+            "title": "About these short-course materials",
+            "text_md": RELATED_VIDEOS_INTRO_MD,
+        },
+        {
+            "kind": "link",
+            "title": "Complete Slides (PDF — 1.6MB)",
+            "url": _resource_url(COMPLETE_SLIDES_SLUG),
+        },
+        {
+            "kind": "header",
+            "title": "Summer 2014 — Tsinghua Short Course (6 lectures)",
+        },
+    ]
+    for n, title, slide_slug, _videos in TSINGHUA_2014_LECTURES:
+        items.append(
+            {
+                "kind": "link",
+                "title": f"Lecture {n} — {title} (PDF)",
+                "url": _resource_url(slide_slug),
+                "indent": 1,
+            }
+        )
+    items.append(
+        {
+            "kind": "header",
+            "title": "Summer 2012 — Short Course (7 lecture-note PDFs)",
+        }
+    )
+    for title, slug in SUMMER_2012_NOTES:
+        items.append(
+            {
+                "kind": "link",
+                "title": title,
+                "url": _resource_url(slug),
+                "indent": 1,
+            }
+        )
+    return items
+
+
+def _tsinghua_2014_video_items() -> list[dict]:
+    """Module body for the Video Lectures page — 18 ``kind="video"`` items.
+
+    Titles are verbatim from OCW (``Approximate Dynamic Programming,
+    Lecture N, Part P``). The Modules page filters ``kind="video"`` items
+    out of its view, so this module exists purely to populate
+    CourseVideosPage from ``course.modules.flatMap(...kind == "video")``.
+    """
+    items: list[dict] = []
+    for n, _title, _slide, video_slugs in TSINGHUA_2014_LECTURES:
+        for part_idx, slug in enumerate(video_slugs, start=1):
+            items.append(
+                {
+                    "kind": "video",
+                    "title": f"Approximate Dynamic Programming, Lecture {n}, Part {part_idx}",
+                    "url": _resource_url(slug),
+                }
+            )
+    return items
+
+
 def _modules() -> list[tuple[str, list[dict]]]:
-    """Four modules:
+    """Six modules:
 
       1. "Direct links" — top-of-course navigation.
-      2. "Lecture Slides" — 23 link items, one per lecture.
+      2. "Lecture Slides" — 23 link items, one per MIT 6.231 lecture.
       3. "Project Resources" — list-of-topics PDF.
       4. "Practice Midterms" — 2008/2009/2011 papers + solutions (the 2015
          midterm is the graded Assignment, not in Modules).
+      5. "Approximate DP — Short-course lecture notes" — slides from
+         OCW's Related Video Lectures page (Tsinghua 2014 + Summer 2012).
+      6. "Video Lectures (Bertsekas 2014 Tsinghua)" — 18 ``kind="video"``
+         items mirroring OCW. Surfaces on the Video Lectures page only;
+         filtered out of the Modules view (see CourseModulesPage).
     """
     return [
         ("Direct links", _direct_links_items()),
         ("Lecture Slides", _lecture_slides_items()),
         ("Project Resources", _project_resources_items()),
         ("Practice Midterms", _practice_midterms_items()),
+        (
+            "Approximate DP — Short-course lecture notes (Bertsekas 2014 + 2012)",
+            _related_short_course_notes_items(),
+        ),
+        (
+            "Video Lectures (Bertsekas 2014 Tsinghua)",
+            _tsinghua_2014_video_items(),
+        ),
     ]
 
 
@@ -628,8 +800,10 @@ def _fixed_title_to_url() -> dict[str, str]:
         "Assignments index": ASSIGNMENTS_URL,
         "Exams index": EXAMS_URL,
         "Projects page": PROJECTS_URL,
-        "Related video lectures (Bertsekas 2014 ASU)": RELATED_VIDEOS_URL,
+        "Related video lectures (Bertsekas 2014 Tsinghua short course)": RELATED_VIDEOS_URL,
         "List of project topics (with references)": _project_topics_url(),
+        # Approximate DP short-course notes module — slides only.
+        "Complete Slides (PDF — 1.6MB)": _resource_url(COMPLETE_SLIDES_SLUG),
     }
     for n, (topic, _ch) in LECTURE_TOPICS.items():
         out[f"Lecture {n}: {topic}"] = _lec_url(n)
@@ -637,7 +811,29 @@ def _fixed_title_to_url() -> dict[str, str]:
     for year in _PRACTICE_MIDTERM_YEARS:
         out[f"Midterm {year} — paper"] = _midterm_url(year)
         out[f"Midterm {year} — solution"] = _midterm_sol_url(year)
+    # Tsinghua 2014 short course — slide PDFs (one per lecture).
+    for n, title, slide_slug, _videos in TSINGHUA_2014_LECTURES:
+        out[f"Lecture {n} — {title} (PDF)"] = _resource_url(slide_slug)
+    # Summer 2012 short course — 7 lecture-note PDFs.
+    for title, slug in SUMMER_2012_NOTES:
+        out[title] = _resource_url(slug)
+    # Tsinghua 2014 video segments — kind="video" items, but title→URL still
+    # canonical for --update-urls.
+    for n, _title, _slide, video_slugs in TSINGHUA_2014_LECTURES:
+        for part_idx, slug in enumerate(video_slugs, start=1):
+            out[f"Approximate Dynamic Programming, Lecture {n}, Part {part_idx}"] = (
+                _resource_url(slug)
+            )
     return out
+
+
+# Title renames to apply during update_urls so existing-DB courses get the new
+# title without losing the row. Format: {old_title: new_title}.
+_TITLE_RENAMES: dict[str, str] = {
+    "Related video lectures (Bertsekas 2014 ASU)": (
+        "Related video lectures (Bertsekas 2014 Tsinghua short course)"
+    ),
+}
 
 
 def update_urls(db: Session) -> dict:
@@ -669,6 +865,11 @@ def update_urls(db: Session) -> dict:
     for m in course.modules:
         for it in m.items:
             counts["items_examined"] += 1
+            # Apply title renames before URL lookup so the renamed title hits
+            # the new entry in ``fixed``.
+            if it.title in _TITLE_RENAMES:
+                it.title = _TITLE_RENAMES[it.title]
+                counts["items_updated"] += 1
             if it.title in fixed:
                 new_url = fixed[it.title]
                 if new_url != it.external_url:

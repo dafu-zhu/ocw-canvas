@@ -171,6 +171,9 @@ def test_syllabus_contains_grading_split():
     assert "35%" in SYLLABUS_MD
     assert "45%" in SYLLABUS_MD
     assert "Quiz" in SYLLABUS_MD or "Midterm" in SYLLABUS_MD
+    # USP of this seed: OCW publishes Gallager's official solutions, so the
+    # AI grader compares against the real reference rather than a regenerated key.
+    assert "official solutions" in SYLLABUS_MD.lower()
 
 
 def test_home_md_mentions_gallager_and_term_label_is_user_set():

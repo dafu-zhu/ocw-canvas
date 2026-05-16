@@ -334,7 +334,7 @@ def _modules() -> list[tuple[str, list[dict]]]:
 
 
 SYLLABUS_MD = """## Prerequisites
-6.041 / 6.341 (Probabilistic Systems Analysis & Applied Probability), or
+6.041 / 6.431 (Probabilistic Systems Analysis & Applied Probability), or
 equivalent comfort with elementary probability: discrete and continuous random
 variables, expectation, conditioning, basic limit theorems. Some patience for
 careful mathematical reasoning.
@@ -378,10 +378,10 @@ exam assignment's description as additional practice, and also collected
 in the **Practice exams** module.
 """
 
-HOME_MD = """**MIT 6.262 — Discrete Stochastic Processes (Gallager, Spring
-2011).** Course materials mirrored from MIT OCW. The term shown above is
-*your* self-study term — edit it from the course settings when your plan
-shifts.
+HOME_MD = """**MIT 6.262 — Discrete Stochastic Processes (Gallager, Spring 2011).**
+
+Course materials mirrored from MIT OCW. The term shown above is *your*
+self-study term — edit it from the course settings when your plan shifts.
 
 The proof-flavoured stochastic-processes course at MIT. Builds out the
 machinery for working with random processes that evolve in time — Bernoulli

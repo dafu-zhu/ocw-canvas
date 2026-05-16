@@ -25,14 +25,14 @@ Pattern differences vs the MIT 18.065 / 18.700 seeds:
 """
 from __future__ import annotations
 
-import argparse  # noqa: F401 — used in later tasks (CLI in main())
+import argparse
 import re
 from urllib.parse import urljoin
 
 import httpx
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal  # noqa: F401 — used in later tasks (main() CLI)
+from app.db import SessionLocal
 from app.models import Assignment, AssignmentGroup, Course, Module, ModuleItem
 from app.services import storage
 
@@ -819,3 +819,90 @@ def update_urls(db: Session) -> dict:
 
     db.commit()
     return counts
+
+
+def refresh_solutions(db: Session) -> dict:
+    """Re-download every official-solution PDF on the live MIT 6.262 course.
+
+    Forces ``_attach_official_solution`` to re-fetch by clearing the
+    ``official_solution_file_path`` field first, so the idempotence check
+    does not short-circuit. Useful when OCW rotates a PDF's content hash.
+    """
+    course = db.query(Course).filter(Course.code == CODE).first()
+    if course is None:
+        return {"course_found": False, "refreshed": 0}
+
+    counts = {"course_found": True, "refreshed": 0}
+    by_title = {a.title: a for a in course.assignments}
+
+    for k, *_ in PROBLEM_SETS:
+        a = next(
+            (x for t, x in by_title.items() if t.startswith(f"Problem Set {k} ")),
+            None,
+        )
+        if a is None:
+            continue
+        a.official_solution_file_path = ""
+        _attach_official_solution(db, a, f"mit6_262s11_assn{k:02d}_sol")
+        counts["refreshed"] += 1
+
+    mid_year, *_ = MIDTERM_SPEC
+    a = next((x for t, x in by_title.items() if _MIDTERM_TITLE_RE.match(t)), None)
+    if a is not None:
+        a.official_solution_file_path = ""
+        _attach_official_solution(db, a, f"{_exam_slug('mid', mid_year)}_sol")
+        counts["refreshed"] += 1
+
+    fin_year, *_ = FINAL_SPEC
+    a = next((x for t, x in by_title.items() if _FINAL_TITLE_RE.match(t)), None)
+    if a is not None:
+        a.official_solution_file_path = ""
+        _attach_official_solution(db, a, f"{_exam_slug('final', fin_year)}_sol")
+        counts["refreshed"] += 1
+
+    db.commit()
+    return counts
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed the MIT 6.262 course.")
+    parser.add_argument(
+        "--force", action="store_true", help="delete an existing MIT 6.262 course first"
+    )
+    parser.add_argument(
+        "--update-urls",
+        action="store_true",
+        help="only refresh module_item external_url + assignment fields on the "
+        "existing course (no deletions, no PDF re-download)",
+    )
+    parser.add_argument(
+        "--refresh-solutions",
+        action="store_true",
+        help="re-download every official-solution PDF from OCW (use if hash drift "
+        "breaks the existing paths)",
+    )
+    args = parser.parse_args()
+    db = SessionLocal()
+    try:
+        if args.update_urls:
+            counts = update_urls(db)
+            print("update_urls: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+            return
+        if args.refresh_solutions:
+            counts = refresh_solutions(db)
+            print("refresh_solutions: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+            return
+        c = seed(db, force=args.force)
+        n_modules = len(c.modules)
+        n_items = sum(len(m.items) for m in c.modules)
+        n_assign = len(c.assignments)
+        print(
+            f"Seeded {c.code} — {c.title}: {n_modules} modules, {n_items} items, "
+            f"{n_assign} assignments."
+        )
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    main()

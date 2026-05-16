@@ -607,3 +607,26 @@ def test_update_urls_refreshes_assignment_fields(db):
     assert ps1.official_solution_url == seed_mod._ps_sol_url(1)
     assert mid.description_md != "STALE-MID"
     assert fin.description_md != "STALE-FIN"
+
+
+def test_refresh_solutions_redownloads(db, monkeypatch, tmp_path):
+    # First seed call uses the autouse-fixture's default mocks → bytes b"%PDF-fake".
+    c = seed_mod.seed(db)
+
+    # Verify pre-state: each assignment has a path with the default bytes.
+    a0 = c.assignments[0]
+    pre_bytes = storage_mod.read_bytes("solutions", a0.official_solution_file_path)
+    assert pre_bytes == b"%PDF-fake"
+
+    # Now flip the fake bytes and call refresh.
+    class _Resp2:
+        content = b"second"
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(seed_mod.httpx, "get", lambda url, **kw: _Resp2())
+    counts = seed_mod.refresh_solutions(db)
+    assert counts["course_found"] is True
+    assert counts["refreshed"] == 14
+    # Storage now contains the second version.
+    post_bytes = storage_mod.read_bytes("solutions", a0.official_solution_file_path)
+    assert post_bytes == b"second"

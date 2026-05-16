@@ -1,6 +1,7 @@
 """Seed the Columbia IEOR 6711 — Stochastic Models I course (Ward Whitt, Fall 2013).
 
-Run:  cd backend && uv run python -m seed.seed_ieor_6711 [--force] [--update-urls] [--refresh-solutions]
+Run:  cd backend && uv run python -m seed.seed_ieor_6711 [flags below]
+Flags: [--force] [--update-urls] [--refresh-solutions]
 Source: https://www.columbia.edu/~ww2040/6711F13/IEOR6711F13.html
 
 Mirrors the ``seed_6_262`` shape, including the official-solution upload
@@ -53,26 +54,26 @@ _USER_AGENT = "Mozilla/5.0 (compatible; ocw-canvas-seed/1.0)"
 # are not included in this module so the list mirrors what Whitt actually
 # published.
 LECTURE_NOTES: list[tuple[int, str, str, str, str]] = [
-    (1,  "lect0903",         "2013-09-03", "LLN; random variables",                       "Ross Ch 1"),
-    (2,  "lect0905",         "2013-09-05", "Modes of convergence; SLLN proof",            "Ross Ch 1"),
-    (3,  "lectCLT",          "2013-09-10", "Normal approximation; CLT",                   "Ross Ch 1"),
-    (4,  "lect0912",         "2013-09-12", "Transforms",                                  "Ross Ch 1"),
-    (5,  "lect0917",         "2013-09-17", "The exponential distribution",                "Ross Ch 2 §2.1"),
-    (6,  "lect091913",       "2013-09-19", "Poisson process as a special case",           "Ross Ch 2 §2.2"),
-    (7,  "lect0926",         "2013-09-26", "Mt/G/infinity queue & staffing applications", "Ross Ch 2 §§2.3–2.4"),
-    (8,  "lect1001",         "2013-10-01", "Compound Poisson process",                    "Ross Ch 2 §2.5"),
-    (9,  "lect1003",         "2013-10-03", "Simulating non-homogeneous Poisson processes", "Ross Ch 2 §2.4"),
-    (10, "lect1008",         "2013-10-08", "Elementary renewal-reward theory",            "Ross Ch 3 §3.6"),
-    (11, "lect1010",         "2013-10-10", "Renewal function & renewal equation",         "Ross Ch 3 §§3.3–3.5"),
-    (12, "lect1015",         "2013-10-15", "Inspection paradox; excess, age, total lifetime", "Ross Ch 3 §3.5"),
-    (13, "lect1017",         "2013-10-17", "Patterns",                                    "Ross Ch 3"),
-    (14, "lect1022",         "2013-10-22", "Blackwell's renewal theorem (coupling proof)", "Ross Ch 3 §3.5"),
-    (15, "lect1024",         "2013-10-24", "Markov chains — introduction",                "Ross Ch 4 §§4.1–4.3"),
-    (16, "lect1029",         "2013-10-29", "Contraction approach to DTMCs",               "Ross Ch 4 §4.4"),
-    (17, "lect1031",         "2013-10-31", "M/G/1 queue",                                 "Ross Ch 4 §4.5"),
-    (18, "lect1107",         "2013-11-07", "Reversibility",                               "Ross Ch 4 §4.7"),
-    (19, "lect1112",         "2013-11-12", "Regenerative & semi-Markov processes",        "Ross Ch 3 §3.7 + Ch 4 §4.8"),
-    (20, "CTMCnotes120413",  "2013-11-19", "CTMCs — comprehensive lecture notes",         "Ross Ch 5"),
+    (1, "lect0903", "2013-09-03", "LLN; random variables", "Ross Ch 1"),
+    (2, "lect0905", "2013-09-05", "Modes of convergence; SLLN proof", "Ross Ch 1"),
+    (3, "lectCLT", "2013-09-10", "Normal approximation; CLT", "Ross Ch 1"),
+    (4, "lect0912", "2013-09-12", "Transforms", "Ross Ch 1"),
+    (5, "lect0917", "2013-09-17", "The exponential distribution", "Ross Ch 2 §2.1"),
+    (6, "lect091913", "2013-09-19", "Poisson process as a special case", "Ross Ch 2 §2.2"),
+    (7, "lect0926", "2013-09-26", "Mt/G/infinity queue & staffing", "Ross Ch 2 §§2.3–2.4"),
+    (8, "lect1001", "2013-10-01", "Compound Poisson process", "Ross Ch 2 §2.5"),
+    (9, "lect1003", "2013-10-03", "Simulating non-homogeneous Poisson", "Ross Ch 2 §2.4"),
+    (10, "lect1008", "2013-10-08", "Elementary renewal-reward theory", "Ross Ch 3 §3.6"),
+    (11, "lect1010", "2013-10-10", "Renewal function & renewal equation", "Ross Ch 3 §§3.3–3.5"),
+    (12, "lect1015", "2013-10-15", "Inspection paradox; excess and age", "Ross Ch 3 §3.5"),
+    (13, "lect1017", "2013-10-17", "Patterns", "Ross Ch 3"),
+    (14, "lect1022", "2013-10-22", "Blackwell's renewal theorem (coupling)", "Ross Ch 3 §3.5"),
+    (15, "lect1024", "2013-10-24", "Markov chains — introduction", "Ross Ch 4 §§4.1–4.3"),
+    (16, "lect1029", "2013-10-29", "Contraction approach to DTMCs", "Ross Ch 4 §4.4"),
+    (17, "lect1031", "2013-10-31", "M/G/1 queue", "Ross Ch 4 §4.5"),
+    (18, "lect1107", "2013-11-07", "Reversibility", "Ross Ch 4 §4.7"),
+    (19, "lect1112", "2013-11-12", "Regenerative & semi-Markov processes", "Ross Ch 4 §4.8"),
+    (20, "CTMCnotes120413", "2013-11-19", "CTMCs — comprehensive notes", "Ross Ch 5"),
 ]
 
 
@@ -212,7 +213,11 @@ def _direct_links_items() -> list[dict]:
         {"kind": "link", "title": "IEOR 6711 course home (Whitt, Fall 2013)", "url": HOME},
         {"kind": "link", "title": "Lecture notes index", "url": LECTURES_INDEX_URL},
         {"kind": "link", "title": "Homework index", "url": HOMEWORK_INDEX_URL},
-        {"kind": "link", "title": "Laplace transforms supplement (Whitt)", "url": LAPLACE_NOTES_URL},
+        {
+            "kind": "link",
+            "title": "Laplace transforms supplement (Whitt)",
+            "url": LAPLACE_NOTES_URL,
+        },
         {
             "kind": "link",
             "title": "Ross — Stochastic Processes 2e (Wiley publisher page)",

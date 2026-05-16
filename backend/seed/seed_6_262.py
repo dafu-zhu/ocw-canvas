@@ -672,7 +672,6 @@ def seed(db: Session, force: bool = False) -> Course:
 # --------------------------------------------------------------------------- updater
 
 _LECTURE_NOTE_RE = re.compile(r"^Lec (\d+)\b")
-_PS_TITLE_RE = re.compile(r"^Problem Set (\d+)\b")
 _MIDTERM_TITLE_RE = re.compile(r"^Midterm Exam \((\d{4}) paper\)")
 _FINAL_TITLE_RE = re.compile(r"^Final Exam \((\d{4}) paper\)")
 
@@ -704,7 +703,16 @@ def update_urls(db: Session) -> dict:
     """Refresh URLs on the live MIT 6.262 course in place — module-item URLs,
     per-lecture note text, and assignment description_md / coverage / URL.
     Does NOT re-download PDFs (use --refresh-solutions for that). Preserves
-    submissions / AI solutions / announcements / grades."""
+    submissions / AI solutions / announcements / grades.
+
+    Counter semantics:
+      - ``items_examined`` / ``items_updated``: per module-item.
+      - ``assignments_updated``: count of *distinct* assignments with any
+        field change (description_md and/or official_solution_url). An
+        assignment with two field changes is counted once.
+      - ``coverage_updated``: per assignment whose covers_lecture_from/to
+        changed.
+    """
     course = db.query(Course).filter(Course.code == CODE).first()
     if course is None:
         return {"course_found": False}
@@ -758,12 +766,13 @@ def update_urls(db: Session) -> dict:
                 counts["items_updated"] += 1
 
     # 3) Assignments: refresh description_md, coverage, official_solution_url.
+    dirty_assignments: set[str] = set()
     by_title = {a.title: a for a in course.assignments}
     for k, topic, lec_from, lec_to in PROBLEM_SETS:
         a = next(
             (
                 x for t, x in by_title.items()
-                if _PS_TITLE_RE.match(t) and t.startswith(f"Problem Set {k} ")
+                if t.startswith(f"Problem Set {k} ")
             ),
             None,
         )
@@ -772,7 +781,7 @@ def update_urls(db: Session) -> dict:
         new_desc = _ps_description(k, topic, lec_from, lec_to)
         if a.description_md != new_desc:
             a.description_md = new_desc
-            counts["assignments_updated"] += 1
+            dirty_assignments.add(a.id)
         if a.covers_lecture_from != lec_from or a.covers_lecture_to != lec_to:
             a.covers_lecture_from = lec_from
             a.covers_lecture_to = lec_to
@@ -780,7 +789,7 @@ def update_urls(db: Session) -> dict:
         new_url = _ps_sol_url(k)
         if a.official_solution_url != new_url:
             a.official_solution_url = new_url
-            counts["assignments_updated"] += 1
+            dirty_assignments.add(a.id)
 
     for title_re, spec, kind, builder in (
         (_MIDTERM_TITLE_RE, MIDTERM_SPEC, "mid", _midterm_description),
@@ -796,7 +805,7 @@ def update_urls(db: Session) -> dict:
         new_desc = builder(spec)
         if a.description_md != new_desc:
             a.description_md = new_desc
-            counts["assignments_updated"] += 1
+            dirty_assignments.add(a.id)
         if a.covers_lecture_from != lec_from or a.covers_lecture_to != lec_to:
             a.covers_lecture_from = lec_from
             a.covers_lecture_to = lec_to
@@ -804,7 +813,9 @@ def update_urls(db: Session) -> dict:
         new_url = _exam_sol_url(kind, year)
         if a.official_solution_url != new_url:
             a.official_solution_url = new_url
-            counts["assignments_updated"] += 1
+            dirty_assignments.add(a.id)
+
+    counts["assignments_updated"] = len(dirty_assignments)
 
     db.commit()
     return counts

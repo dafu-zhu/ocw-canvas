@@ -576,3 +576,34 @@ def test_update_urls_does_not_redownload_pdfs(db, monkeypatch):
     # Solution file paths preserved.
     for a in c.assignments:
         assert a.official_solution_file_path.startswith("official/6_262/")
+
+
+def test_update_urls_refreshes_assignment_fields(db):
+    c = seed_mod.seed(db)
+    ps1 = next(a for a in c.assignments if a.title.startswith("Problem Set 1 "))
+    mid = next(a for a in c.assignments if a.title.startswith("Midterm Exam"))
+    fin = next(a for a in c.assignments if a.title.startswith("Final Exam"))
+
+    # Corrupt all three fields on PS1 + descriptions on midterm and final.
+    ps1.description_md = "STALE"
+    ps1.covers_lecture_from = 999
+    ps1.covers_lecture_to = 999
+    ps1.official_solution_url = "https://example.com/STALE"
+    mid.description_md = "STALE-MID"
+    fin.description_md = "STALE-FIN"
+    db.commit()
+
+    counts = seed_mod.update_urls(db)
+    # 3 assignments touched (ps1, mid, fin) — each counted once.
+    assert counts["assignments_updated"] >= 3
+    # PS1 coverage refreshed (1, 3) per PROBLEM_SETS[0].
+    assert counts["coverage_updated"] >= 1
+    db.refresh(ps1)
+    db.refresh(mid)
+    db.refresh(fin)
+    assert ps1.description_md != "STALE"
+    assert ps1.covers_lecture_from == 1
+    assert ps1.covers_lecture_to == 3
+    assert ps1.official_solution_url == seed_mod._ps_sol_url(1)
+    assert mid.description_md != "STALE-MID"
+    assert fin.description_md != "STALE-FIN"

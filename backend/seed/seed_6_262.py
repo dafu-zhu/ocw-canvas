@@ -172,6 +172,8 @@ def _attach_official_solution(db: Session, a: Assignment, slug: str) -> None:
         resp = httpx.get(pdf_url, timeout=60)
         resp.raise_for_status()
         storage.upload_bytes("solutions", storage_key, resp.content, "application/pdf")
+        # Storage write commits immediately; the file_path assignment below
+        # only persists on the caller's db.commit().
         a.official_solution_file_path = storage_key
     except Exception as exc:  # noqa: BLE001
         # Don't break the seed for one missing solution; degrade to URL-only.

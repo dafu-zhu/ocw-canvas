@@ -430,6 +430,41 @@ def test_attach_official_solution_idempotent(db, monkeypatch, tmp_path):
     assert a.official_solution_file_path == "official/6_262/mit6_262s11_assn01_sol.pdf"
 
 
+def test_attach_official_solution_redownloads_when_storage_object_missing(
+    db, monkeypatch, tmp_path
+):
+    """Pre-populated file_path but the underlying Storage object is missing
+    (e.g. bucket cleared / object deleted out-of-band) — the helper must
+    re-download rather than trust the stale path."""
+    a = _make_assignment(db)
+    # Pre-populate but DON'T write the file to storage — read_bytes will fail.
+    a.official_solution_file_path = "official/6_262/mit6_262s11_assn01_sol.pdf"
+    db.commit()
+
+    monkeypatch.setattr(storage_mod, "_supabase_configured", lambda: False)
+    monkeypatch.setattr(storage_mod, "_LOCAL_ROOT", tmp_path)
+
+    # Network must be hit this time.
+    monkeypatch.setattr(
+        seed_mod, "_resolve_pdf_url", lambda slug: f"https://x/{slug}.pdf"
+    )
+
+    class _Resp:
+        content = b"fresh-pdf-bytes"
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(seed_mod.httpx, "get", lambda url, **kw: _Resp())
+
+    seed_mod._attach_official_solution(db, a, "mit6_262s11_assn01_sol")
+    db.commit()
+    db.refresh(a)
+
+    # File path unchanged (already matched the storage_key); URL set; bytes now present.
+    assert a.official_solution_file_path == "official/6_262/mit6_262s11_assn01_sol.pdf"
+    stored = storage_mod.read_bytes("solutions", a.official_solution_file_path)
+    assert stored == b"fresh-pdf-bytes"
+
+
 def test_attach_official_solution_graceful_on_failure(db, monkeypatch, tmp_path):
     a = _make_assignment(db)
 

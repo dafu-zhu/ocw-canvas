@@ -27,6 +27,29 @@ from seed.seed_6_262 import (
     seed,
 )
 
+
+@pytest.fixture(autouse=True)
+def _mock_network_for_seed(monkeypatch, tmp_path):
+    """Default mocks so any test that calls seed(db) doesn't hit the network.
+
+    Tests that need specific network/storage behaviour (see the four
+    _attach_official_solution tests + test_seed_uploads_official_solutions)
+    set their own monkeypatches; pytest stacks them on top of these defaults.
+    """
+    def _fake_resolve(slug):
+        return f"https://ocw.mit.edu/fake/{slug}.pdf"
+
+    class _FakePdfResp:
+        content = b"%PDF-fake"
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(seed_mod, "_resolve_pdf_url", _fake_resolve)
+    monkeypatch.setattr(seed_mod.httpx, "get", lambda url, **kw: _FakePdfResp())
+    monkeypatch.setattr(storage_mod, "_supabase_configured", lambda: False)
+    monkeypatch.setattr(storage_mod, "_LOCAL_ROOT", tmp_path)
+    yield
+
+
 _SAMPLE_OCW_HTML = (
     '<html><body>\n'
     '<h1>Problem Set 1 Solutions</h1>\n'

@@ -1,3 +1,5 @@
+import pytest
+
 from app.models import Course
 from seed.seed_6_262 import (
     BASE,
@@ -17,9 +19,54 @@ from seed.seed_6_262 import (
     _modules,
     _ps_sol_url,
     _ps_url,
+    _resolve_pdf_url,
     _video_url,
     seed,
 )
+
+_SAMPLE_OCW_HTML = (
+    '<html><body>\n'
+    '<h1>Problem Set 1 Solutions</h1>\n'
+    '<a class="download" href="/courses/6-262-discrete-stochastic-processes-spring-2011/'
+    'c12643e48449ee92da0cba905e0ba5ca_MIT6_262S11_assn01_sol.pdf">\n'
+    '  Download File\n'
+    '</a>\n'
+    '</body></html>\n'
+)
+
+
+def test_resolve_pdf_url_finds_hash_prefixed_pdf(monkeypatch):
+    captured: dict = {}
+
+    class _Resp:
+        text = _SAMPLE_OCW_HTML
+        def raise_for_status(self): pass
+
+    def _fake_get(url, **kw):
+        captured["url"] = url
+        return _Resp()
+
+    import httpx
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    result = _resolve_pdf_url("mit6_262s11_assn01_sol")
+    assert result == (
+        "https://ocw.mit.edu/courses/6-262-discrete-stochastic-processes-spring-2011/"
+        "c12643e48449ee92da0cba905e0ba5ca_MIT6_262S11_assn01_sol.pdf"
+    )
+    assert captured["url"].endswith("/resources/mit6_262s11_assn01_sol/")
+
+
+def test_resolve_pdf_url_raises_on_no_pdf(monkeypatch):
+    class _Resp:
+        text = "<html><body>No PDF here.</body></html>"
+        def raise_for_status(self): pass
+
+    import httpx
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: _Resp())
+
+    with pytest.raises(RuntimeError, match="no PDF link"):
+        _resolve_pdf_url("mit6_262s11_assn01_sol")
 
 
 def test_code_and_base():

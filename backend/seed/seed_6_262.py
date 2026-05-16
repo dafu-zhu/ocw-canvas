@@ -26,7 +26,10 @@ Pattern differences vs the MIT 18.065 / 18.700 seeds:
 from __future__ import annotations
 
 import argparse  # noqa: F401 — used in later tasks (CLI in main())
+import re
+from urllib.parse import urljoin
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal  # noqa: F401 — used in later tasks (main() CLI)
@@ -107,6 +110,28 @@ LECTURE_VIDEO_SLUGS: dict[int, str] = {
 
 def _video_url(n: int) -> str:
     return f"{BASE}/resources/{LECTURE_VIDEO_SLUGS[n]}/"
+
+
+_PDF_HREF_RE = re.compile(r'href="(/courses/[^"]+\.pdf)"')
+
+
+def _resolve_pdf_url(slug: str) -> str:
+    """Scrape ``BASE/resources/{slug}/`` for the hash-prefixed PDF URL.
+
+    OCW resource pages render PDFs inline with a content-hash-prefixed href
+    (e.g. ``/courses/.../c12643..._MIT6_262S11_assn01_sol.pdf``). The hash is
+    not derivable from the slug.
+
+    Raises ``RuntimeError`` if no PDF link is found (e.g. OCW restructured
+    the page or removed the resource).
+    """
+    page_url = f"{BASE}/resources/{slug}/"
+    resp = httpx.get(page_url, timeout=30)
+    resp.raise_for_status()
+    m = _PDF_HREF_RE.search(resp.text)
+    if m is None:
+        raise RuntimeError(f"no PDF link found on {page_url}")
+    return urljoin("https://ocw.mit.edu", m.group(1))
 
 
 # (lecture_number, topic, gallager_reading). The OCW calendar publishes

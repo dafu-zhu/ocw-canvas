@@ -213,7 +213,8 @@ export function AssignmentDetailPage() {
         </>
       )}
 
-      {/* Reference solution */}
+      {/* Reference solution — hidden for project-mode assignments (AI grades without a key) */}
+      {a.requires_solution_key && (
       <div style={{ marginTop: 24 }}>
         <button className="btn" onClick={() => setShowRef(!showRef)}>
           {showRef ? "Hide" : "View"} reference solution
@@ -271,6 +272,7 @@ export function AssignmentDetailPage() {
           </div>
         )}
       </div>
+      )}
     </CourseLayout>
   );
 }

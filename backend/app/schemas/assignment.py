@@ -14,6 +14,7 @@ class AssignmentBase(ORMModel):
     accepts_text: bool = True
     official_solution_url: str = ""
     official_solution_file_path: str = ""
+    requires_solution_key: bool = True
     late_policy: str = "flag_only"  # none | flag_only | percent_per_day
     late_value: float | None = None
     position: int = 0

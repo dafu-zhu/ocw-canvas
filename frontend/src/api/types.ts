@@ -85,6 +85,7 @@ export interface Assignment {
   accepts_text: boolean;
   official_solution_url: string;
   official_solution_file_path: string;
+  requires_solution_key: boolean;
   late_policy: LatePolicy;
   late_value: number | null;
   position: number;

@@ -17,9 +17,9 @@ Pattern differences vs the MIT 18.700 seed:
     lecture range; the user reads the relevant section of the PDF.
   - Final Project IS published (description + topic suggestions, no rubric).
     The original course substitutes the project for the last 3 homeworks; we
-    mirror that — PSets cover lec 1-27, Final Project covers lec 28-36. NB:
-    project-style assignments aren't yet AI-gradable (the AI flow assumes a
-    reference solution); for now description_md notes "Manual grading expected".
+    mirror that — PSets cover lec 1-27, Final Project covers lec 28-36. The
+    Final Project sets requires_solution_key=False so the AI grades it in
+    project-mode (quality/depth/clarity, no reference comparison).
   - No exams in the original course either ("homework + lab + final project"
     grading, per Strang's syllabus). Self-study split: PSets 70%, Project 30%.
 """
@@ -242,8 +242,9 @@ The original course substitutes a project for the last three weekly
 homeworks. Strang's Final Project page lists ~13 topic suggestions (SVD/PCA,
 random matrices, gradient-descent variants, sparse/L1 methods, matrix
 completion, neural-net experiments, low-rank approximation). Pick one, work
-it deeply, and submit a writeup + code. Manual grading expected — there is
-no source rubric for the AI to grade against.
+it deeply, and submit a writeup + code. The AI grades this in **project
+mode**: no reference solution, evaluation is on quality of approach, depth
+of analysis, clarity of writing, and overall effort.
 """
 
 HOME_MD = """**MIT 18.065 — Matrix Methods in Data Analysis, Signal Processing,
@@ -296,8 +297,9 @@ def _final_project_description() -> str:
         f"matrix completion, neural-net experiments, low-rank approximation): "
         f"[Final Project page]({FINAL_PROJECT_URL}). Pick one direction, work "
         "it deeply, submit a writeup + code (any language; Strang's labs use "
-        "Julia and Python). Manual grading expected — there is no source "
-        "rubric for the AI to grade against."
+        "Julia and Python). The AI grades this in **project mode** — no "
+        "reference solution, evaluation is on quality of approach, depth of "
+        "analysis, and clarity of writing."
     )
 
 
@@ -443,6 +445,8 @@ def seed(db: Session, force: bool = False) -> Course:
         points_possible=100,
         accepts_files=True,
         accepts_text=True,
+        # Project-style: AI grades on quality/effort, no reference solution.
+        requires_solution_key=False,
         position=0,
         published=True,
         covers_lecture_from=FINAL_PROJECT_COVERS_FROM,

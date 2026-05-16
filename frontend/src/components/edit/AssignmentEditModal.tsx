@@ -36,6 +36,7 @@ export function AssignmentEditModal({
   const [acceptsFiles, setAcceptsFiles] = useState(assignment?.accepts_files ?? true);
   const [acceptsText, setAcceptsText] = useState(assignment?.accepts_text ?? true);
   const [solUrl, setSolUrl] = useState(assignment?.official_solution_url ?? "");
+  const [requiresKey, setRequiresKey] = useState(assignment?.requires_solution_key ?? true);
   const [latePolicy, setLatePolicy] = useState<LatePolicy>(assignment?.late_policy ?? "flag_only");
   const [lateValue, setLateValue] = useState<string>(
     assignment?.late_value != null ? String(assignment.late_value) : "",
@@ -59,6 +60,7 @@ export function AssignmentEditModal({
       accepts_files: acceptsFiles,
       accepts_text: acceptsText,
       official_solution_url: solUrl,
+      requires_solution_key: requiresKey,
       late_policy: latePolicy,
       late_value: lateValue === "" ? null : Number(lateValue),
       position,
@@ -140,6 +142,14 @@ export function AssignmentEditModal({
       </label>
       <label>Official solution URL (optional — if set, this is the answer key)</label>
       <input value={solUrl} onChange={(e) => setSolUrl(e.target.value)} />
+      <label>
+        <input
+          type="checkbox"
+          checked={!requiresKey}
+          onChange={(e) => setRequiresKey(!e.target.checked)}
+        />{" "}
+        Project-style (no AI reference solution; AI grades on quality/effort)
+      </label>
       <label>Late policy</label>
       <select value={latePolicy} onChange={(e) => setLatePolicy(e.target.value as LatePolicy)}>
         <option value="none">none</option>

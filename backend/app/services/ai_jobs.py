@@ -18,12 +18,29 @@ from app.services.grading import days_late_between, finalize_score
 
 MAX_AUTO_RETRIES = 3
 
+# Used as `key_note` when grading a project-style assignment (one with
+# requires_solution_key=False). The grading prompt builder already handles
+# empty key_text gracefully; this note tells the grader to evaluate on
+# quality / depth / clarity / effort rather than match-against-key.
+PROJECT_KEY_NOTE = (
+    "This is a project-style assignment with no fixed correct answer. Grade "
+    "the submission on the quality of the chosen approach, depth of the "
+    "analysis, clarity of the writeup, and overall effort — not by comparison "
+    "to a reference. Award partial credit generously where the work shows "
+    "real engagement; deduct only for unclear writing, sloppy reasoning, "
+    "or missing components called for in the assignment description."
+)
+
 
 # --------------------------------------------------------------------------- keys
 
 
 def resolve_key(db: Session, assignment: Assignment) -> tuple[str, str | None]:
-    """Returns (kind, ref). kind ∈ {official_url, official_file, ai, none}."""
+    """Returns (kind, ref). kind ∈ {official_url, official_file, ai, project, none}.
+
+    "project" means the assignment is project-style (requires_solution_key=False);
+    grading proceeds without a reference key — see PROJECT_KEY_NOTE.
+    """
     if assignment.official_solution_url:
         return "official_url", assignment.official_solution_url
     if assignment.official_solution_file_path:
@@ -35,10 +52,14 @@ def resolve_key(db: Session, assignment: Assignment) -> tuple[str, str | None]:
     )
     if sol is not None and sol.status == "ready" and sol.content_md.strip():
         return "ai", sol.id
+    if not assignment.requires_solution_key:
+        return "project", None
     return "none", None
 
 
 def has_key(db: Session, assignment: Assignment) -> bool:
+    """True iff the assignment is ready to be graded — either a real key
+    exists, or it's a project-style assignment that grades without one."""
     return resolve_key(db, assignment)[0] != "none"
 
 
@@ -70,6 +91,16 @@ def ensure_ai_solution(db: Session, assignment_id: str) -> AiSolution:
 def run_solution_generation(db: Session, assignment_id: str) -> AiSolution:
     a = db.get(Assignment, assignment_id)
     sol = ensure_ai_solution(db, assignment_id)
+    if a is not None and not a.requires_solution_key:
+        sol.status = "not_required"
+        sol.error = (
+            "project-style assignment (requires_solution_key=False) — "
+            "no reference solution generated; AI grades on quality/effort"
+        )
+        sol.content_md = ""
+        db.commit()
+        db.refresh(sol)
+        return sol
     if not ai.solution_generation_available():
         sol.status = "pending"
         sol.error = (
@@ -181,6 +212,8 @@ def grade_with_ai(db: Session, submission_id: str) -> Grade | None:
             key_note = (
                 f"The official solution is published at {ref}; grade against standard rigor."
             )
+        elif kind == "project":
+            key_note = PROJECT_KEY_NOTE
         for p in sub.file_paths or []:
             try:
                 sub_files[os.path.basename(p)] = storage.read_bytes("submissions", p)

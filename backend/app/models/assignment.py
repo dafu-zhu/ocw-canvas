@@ -50,6 +50,12 @@ class Assignment(Base, TimestampMixin):
     accepts_text: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     official_solution_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
     official_solution_file_path: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # When False, this is a project-style assignment: the AI grades it without
+    # generating or comparing against a reference solution. Defaults True so
+    # all existing assignments behave as before.
+    requires_solution_key: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
     # none | flag_only | percent_per_day
     late_policy: Mapped[str] = mapped_column(String(20), nullable=False, default="flag_only")
     late_value: Mapped[float | None] = mapped_column(Numeric(6, 3), nullable=True)

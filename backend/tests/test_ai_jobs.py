@@ -145,6 +145,59 @@ def test_grade_with_ai_late_penalty(db, monkeypatch):
     assert g.final_score == 50.0
 
 
+def test_resolve_key_project_mode(db):
+    a = _course_assignment(db, requires_solution_key=False)
+    assert ai_jobs.resolve_key(db, a)[0] == "project"
+    assert ai_jobs.has_key(db, a) is True
+
+
+def test_run_solution_generation_skipped_for_project(db, monkeypatch):
+    a = _course_assignment(db, requires_solution_key=False)
+    called = []
+    monkeypatch.setattr(ai, "_invoke", lambda *args, **kw: called.append(1) or ("{}", ""))
+    sol = ai_jobs.run_solution_generation(db, a.id)
+    assert sol.status == "not_required"
+    assert "project-style" in sol.error
+    assert sol.content_md == ""
+    assert called == []
+
+
+def test_grade_with_ai_project_mode(db, monkeypatch):
+    a = _course_assignment(db, requires_solution_key=False)
+    s = _sub(db, a)
+    captured: dict = {}
+
+    def fake_invoke(sys_prompt, user_prompt, files):
+        captured["user"] = user_prompt
+        return (
+            json.dumps({"score": 88, "feedback_md": "Good depth.", "rubric_breakdown": []}),
+            "PROJECT_TRANSCRIPT",
+        )
+
+    monkeypatch.setattr(ai, "_invoke", fake_invoke)
+    g = ai_jobs.grade_with_ai(db, s.id)
+    assert g is not None
+    assert g.graded_by == "ai"
+    assert g.final_score == 88.0
+    db.refresh(s)
+    assert s.status == "graded"
+    # The project-mode key_note should be in the prompt; no fixed-answer key.
+    assert "project-style assignment with no fixed correct answer" in captured["user"]
+
+
+def test_retry_stuck_grades_project_submissions(db, monkeypatch):
+    """Project-mode submissions should be picked up by retry_stuck even though
+    they have no AiSolution row (kind='project' in resolve_key)."""
+    a = _course_assignment(db, requires_solution_key=False)
+    s = _sub(db, a)  # status='submitted'
+    payload = json.dumps({"score": 75, "feedback_md": "ok", "rubric_breakdown": []})
+    monkeypatch.setattr(ai, "_invoke", lambda sys, u, f: (payload, "T"))
+    counts = ai_jobs.retry_stuck(db)
+    assert counts["submitted_now_keyed"] == 1
+    db.refresh(s)
+    assert s.status == "graded"
+
+
 def test_retry_stuck_redrives(db, monkeypatch):
     a = _course_assignment(db)
     db.add(AiSolution(assignment_id=a.id, status="ready", content_md="# key"))

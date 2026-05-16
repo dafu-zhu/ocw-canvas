@@ -7,15 +7,19 @@ Source: https://ocw.mit.edu/courses/18-065-matrix-methods-in-data-analysis-signa
 Idempotent: existing course → no-op unless ``--force``.
 
 Pattern differences vs the MIT 18.700 seed:
-  - Has lecture videos. 34 of 36 are recorded; lectures 28-29 were in-class
-    Julia/Python lab sessions with no recording — included as placeholder note
-    items so the lecture sequence stays visible.
+  - Has lecture videos. 34 of 36 are recorded; per the chapter-readings rule,
+    each lecture is a 'note' item showing the Strang section as primary
+    content, with the video URL embedded inline as a [Watch video →] link.
+    Lectures 28-29 were unrecorded in-class Julia/Python labs — note items
+    explain that and point to Strang's online code instead.
   - OCW publishes problem sets as a single combined PDF (not per-week). Six
     self-study PSets each link to the same combined PDF and span a contiguous
     lecture range; the user reads the relevant section of the PDF.
   - Final Project IS published (description + topic suggestions, no rubric).
     The original course substitutes the project for the last 3 homeworks; we
-    mirror that — PSets cover lec 1-27, Final Project covers lec 28-36.
+    mirror that — PSets cover lec 1-27, Final Project covers lec 28-36. NB:
+    project-style assignments aren't yet AI-gradable (the AI flow assumes a
+    reference solution); for now description_md notes "Manual grading expected".
   - No exams in the original course either ("homework + lab + final project"
     grading, per Strang's syllabus). Self-study split: PSets 70%, Project 30%.
 """
@@ -298,31 +302,22 @@ def _final_project_description() -> str:
 
 
 def _unit_items(lecture_numbers: list[int], readings_md: str) -> list[dict]:
-    """For each lecture: a video item (if recorded) or a placeholder note (if
-    unrecorded lab). Closed with the unit-level Readings note."""
+    """One note item per lecture, showing the Strang chapter/section reading
+    as the primary content. Recorded lectures get an inline video link in the
+    note body; unrecorded labs (28-29) get a placeholder explanation. Closed
+    with the unit-level Readings summary note."""
     items: list[dict] = []
     for n in lecture_numbers:
         topic, section = LECTURE_TOPICS[n]
         if n in LECTURE_VIDEO_SLUGS:
-            items.append(
-                {
-                    "kind": "video",
-                    "title": f"Lecture {n}: {topic} (video)",
-                    "url": _video_url(n),
-                }
-            )
+            text = f"**{section}.** {topic}. [Watch video →]({_video_url(n)})"
         else:
-            items.append(
-                {
-                    "kind": "note",
-                    "title": f"Lecture {n}: {topic}",
-                    "text_md": (
-                        f"**{section}.** {topic}. *Not recorded — in-class "
-                        "lab session. Work through Strang's online code "
-                        "examples instead (linked from his book site)."
-                    ),
-                }
+            text = (
+                f"**{section}.** {topic}. *Not recorded — in-class lab session. "
+                "Work through Strang's online code examples instead "
+                "(linked from his book site).*"
             )
+        items.append({"kind": "note", "title": f"Lec {n} — {topic}", "text_md": text})
     items.append({"kind": "note", "title": "Readings", "text_md": readings_md})
     return items
 
@@ -488,10 +483,8 @@ def seed(db: Session, force: bool = False) -> Course:
 
 # --------------------------------------------------------------------------- updater
 
-# "Lecture 12: ... (video)" — match the recorded-video items.
-_LECTURE_VIDEO_RE = re.compile(r"^Lecture (\d+):.*\(video\)\s*$")
-# "Lecture 28: ..." — match the unrecorded-lab placeholder items.
-_LECTURE_NOTE_RE = re.compile(r"^Lecture (\d+):")
+# "Lec 12 — <topic>" — match per-lecture note items.
+_LECTURE_NOTE_RE = re.compile(r"^Lec (\d+)\b")
 # "Problem Set 7 — <topic>"
 _PS_TITLE_RE = re.compile(r"^Problem Set (\d+)\b")
 
@@ -527,36 +520,36 @@ def update_urls(db: Session) -> dict:
         "coverage_updated": 0,
     }
 
-    # 1) Module-item URLs / text.
+    # 1) Module-item URLs (fixed-title direct-links items).
     for m in course.modules:
         for it in m.items:
             counts["items_examined"] += 1
-            new_url: str | None = None
-            mn = _LECTURE_VIDEO_RE.match(it.title or "")
-            if mn:
-                n = int(mn.group(1))
-                new_url = _video_url(n) if n in LECTURE_VIDEO_SLUGS else None
-            elif it.title in _FIXED_TITLE_TO_URL:
+            if it.title in _FIXED_TITLE_TO_URL:
                 new_url = _FIXED_TITLE_TO_URL[it.title]
-            if new_url and new_url != it.external_url:
-                it.external_url = new_url
-                counts["items_updated"] += 1
-            # Refresh placeholder-note text for unrecorded lab lectures.
-            if it.kind == "note":
-                ln = _LECTURE_NOTE_RE.match(it.title or "")
-                if ln and int(ln.group(1)) not in LECTURE_VIDEO_SLUGS:
-                    n = int(ln.group(1))
-                    spec = LECTURE_TOPICS.get(n)
-                    if spec is not None:
-                        topic, section = spec
+                if new_url != it.external_url:
+                    it.external_url = new_url
+                    counts["items_updated"] += 1
+            # Refresh per-lecture note text (chapter ref + embedded video URL).
+            ln = _LECTURE_NOTE_RE.match(it.title or "")
+            if ln and it.kind == "note":
+                n = int(ln.group(1))
+                spec = LECTURE_TOPICS.get(n)
+                if spec is not None:
+                    topic, section = spec
+                    if n in LECTURE_VIDEO_SLUGS:
+                        new_text = (
+                            f"**{section}.** {topic}. "
+                            f"[Watch video →]({_video_url(n)})"
+                        )
+                    else:
                         new_text = (
                             f"**{section}.** {topic}. *Not recorded — in-class "
                             "lab session. Work through Strang's online code "
-                            "examples instead (linked from his book site)."
+                            "examples instead (linked from his book site).*"
                         )
-                        if it.text_md != new_text:
-                            it.text_md = new_text
-                            counts["items_updated"] += 1
+                    if it.text_md != new_text:
+                        it.text_md = new_text
+                        counts["items_updated"] += 1
 
     # 2) Assignment description_md + lecture coverage.
     by_title = {a.title: a for a in course.assignments}

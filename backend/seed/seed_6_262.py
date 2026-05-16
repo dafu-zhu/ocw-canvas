@@ -667,3 +667,144 @@ def seed(db: Session, force: bool = False) -> Course:
     db.commit()
     db.refresh(course)
     return course
+
+
+# --------------------------------------------------------------------------- updater
+
+_LECTURE_NOTE_RE = re.compile(r"^Lec (\d+)\b")
+_PS_TITLE_RE = re.compile(r"^Problem Set (\d+)\b")
+_MIDTERM_TITLE_RE = re.compile(r"^Midterm Exam \((\d{4}) paper\)")
+_FINAL_TITLE_RE = re.compile(r"^Final Exam \((\d{4}) paper\)")
+
+
+def _fixed_title_to_url() -> dict[str, str]:
+    """Map a module-item title to the URL it should always point to."""
+    out: dict[str, str] = {
+        "6.262 course home (Gallager, MIT OCW Spring 2011)": HOME,
+        "Syllabus": SYLLABUS_URL,
+        "Calendar": CALENDAR_URL,
+        "Course notes (Gallager chapter PDFs)": COURSE_NOTES_URL,
+        "Assignments index": ASSIGNMENTS_URL,
+        "Exams index": EXAMS_URL,
+        "Video lectures gallery": VIDEOS_INDEX_URL,
+        "Gallager — updated draft notes (web archive)": GALLAGER_NOTES_ARCHIVE_URL,
+    }
+    for slug, title in GALLAGER_CHAPTERS:
+        out[title] = _gallager_chap_url(slug)
+    for year in (2011, 2010, 2009):
+        out[f"Midterm {year} — paper"] = _exam_url("mid", year)
+        out[f"Midterm {year} — solution"] = _exam_sol_url("mid", year)
+    for year in (2011, 2009):
+        out[f"Final {year} — paper"] = _exam_url("final", year)
+        out[f"Final {year} — solution"] = _exam_sol_url("final", year)
+    return out
+
+
+def update_urls(db: Session) -> dict:
+    """Refresh URLs on the live MIT 6.262 course in place — module-item URLs,
+    per-lecture note text, and assignment description_md / coverage / URL.
+    Does NOT re-download PDFs (use --refresh-solutions for that). Preserves
+    submissions / AI solutions / announcements / grades."""
+    course = db.query(Course).filter(Course.code == CODE).first()
+    if course is None:
+        return {"course_found": False}
+    counts = {
+        "course_found": True,
+        "items_examined": 0,
+        "items_updated": 0,
+        "assignments_updated": 0,
+        "coverage_updated": 0,
+    }
+
+    fixed = _fixed_title_to_url()
+
+    # 1) Module-item external URLs.
+    for m in course.modules:
+        for it in m.items:
+            counts["items_examined"] += 1
+            if it.title in fixed:
+                new_url = fixed[it.title]
+                if new_url != it.external_url:
+                    it.external_url = new_url
+                    counts["items_updated"] += 1
+            if it.title == "Watch video →":
+                # Look back at preceding sibling "Lec N — ..." note to find N.
+                mn = None
+                for prev in m.items:
+                    if prev.position == it.position - 1:
+                        mn = _LECTURE_NOTE_RE.match(prev.title or "")
+                        break
+                if mn:
+                    n = int(mn.group(1))
+                    new_url = _video_url(n)
+                    if new_url != it.external_url:
+                        it.external_url = new_url
+                        counts["items_updated"] += 1
+
+    # 2) Per-lecture note text (refresh Gallager chapter ref).
+    for m in course.modules:
+        for it in m.items:
+            mn = _LECTURE_NOTE_RE.match(it.title or "")
+            if not mn:
+                continue
+            n = int(mn.group(1))
+            spec = LECTURE_TOPICS.get(n)
+            if spec is None:
+                continue
+            topic, ref = spec
+            new_text = f"**{ref}.** {topic}."
+            if it.text_md != new_text:
+                it.text_md = new_text
+                counts["items_updated"] += 1
+
+    # 3) Assignments: refresh description_md, coverage, official_solution_url.
+    by_title = {a.title: a for a in course.assignments}
+    for k, topic, lec_from, lec_to in PROBLEM_SETS:
+        a = next(
+            (
+                x for t, x in by_title.items()
+                if _PS_TITLE_RE.match(t) and t.startswith(f"Problem Set {k} ")
+            ),
+            None,
+        )
+        if a is None:
+            continue
+        new_desc = _ps_description(k, topic, lec_from, lec_to)
+        if a.description_md != new_desc:
+            a.description_md = new_desc
+            counts["assignments_updated"] += 1
+        if a.covers_lecture_from != lec_from or a.covers_lecture_to != lec_to:
+            a.covers_lecture_from = lec_from
+            a.covers_lecture_to = lec_to
+            counts["coverage_updated"] += 1
+        new_url = _ps_sol_url(k)
+        if a.official_solution_url != new_url:
+            a.official_solution_url = new_url
+            counts["assignments_updated"] += 1
+
+    for title_re, spec, kind, builder in (
+        (_MIDTERM_TITLE_RE, MIDTERM_SPEC, "mid", _midterm_description),
+        (_FINAL_TITLE_RE, FINAL_SPEC, "final", _final_description),
+    ):
+        year, lec_from, lec_to, _ = spec
+        a = next(
+            (x for t, x in by_title.items() if title_re.match(t)),
+            None,
+        )
+        if a is None:
+            continue
+        new_desc = builder(spec)
+        if a.description_md != new_desc:
+            a.description_md = new_desc
+            counts["assignments_updated"] += 1
+        if a.covers_lecture_from != lec_from or a.covers_lecture_to != lec_to:
+            a.covers_lecture_from = lec_from
+            a.covers_lecture_to = lec_to
+            counts["coverage_updated"] += 1
+        new_url = _exam_sol_url(kind, year)
+        if a.official_solution_url != new_url:
+            a.official_solution_url = new_url
+            counts["assignments_updated"] += 1
+
+    db.commit()
+    return counts

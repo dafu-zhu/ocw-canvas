@@ -539,3 +539,40 @@ def test_seed_uploads_official_solutions(db, monkeypatch, tmp_path):
     assert any(p.endswith("mit6_262s11_final11_sol.pdf") for p in paths)
     # All URLs set.
     assert all(a.official_solution_url.startswith(seed_mod.BASE) for a in c.assignments)
+
+
+def test_update_urls_refreshes_module_items(db):
+    c = seed_mod.seed(db)
+    # Manually corrupt a fixed-title item URL to simulate drift.
+    for m in c.modules:
+        for it in m.items:
+            if it.title == "Syllabus":
+                it.external_url = "https://example.com/STALE"
+    db.commit()
+
+    counts = seed_mod.update_urls(db)
+    assert counts["course_found"] is True
+    assert counts["items_updated"] >= 1
+
+    # The Syllabus URL is now correct again.
+    found = False
+    for m in c.modules:
+        for it in m.items:
+            if it.title == "Syllabus":
+                assert it.external_url == seed_mod.SYLLABUS_URL
+                found = True
+    assert found
+
+
+def test_update_urls_does_not_redownload_pdfs(db, monkeypatch):
+    c = seed_mod.seed(db)
+
+    def _boom(*a, **k):
+        raise AssertionError("update_urls must NOT call _resolve_pdf_url")
+
+    monkeypatch.setattr(seed_mod, "_resolve_pdf_url", _boom)
+    counts = seed_mod.update_urls(db)
+    assert counts["course_found"] is True
+    # Solution file paths preserved.
+    for a in c.assignments:
+        assert a.official_solution_file_path.startswith("official/6_262/")

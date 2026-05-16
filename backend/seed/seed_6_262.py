@@ -172,3 +172,162 @@ PROBLEM_SETS: list[tuple[int, str, int, int]] = [
 # years are linked from the description as practice (not graded).
 MIDTERM_SPEC: tuple[int, int, int, tuple[int, ...]] = (2011, 1, 14, (2010, 2009))
 FINAL_SPEC: tuple[int, int, int, tuple[int, ...]] = (2011, 15, 25, (2009,))
+
+
+# Module unit definitions: (module_title, [lecture_numbers], readings_md).
+UNITS: list[tuple[str, list[int], str]] = [
+    (
+        "Unit 1 — Probability review & Bernoulli",
+        [1, 2, 3],
+        "Readings: Gallager Chapter 1. Probability spaces, expectations, "
+        "convergence; the Bernoulli process.",
+    ),
+    (
+        "Unit 2 — Poisson processes",
+        [4, 5],
+        "Readings: Gallager Chapter 2. The Poisson process, its memoryless "
+        "structure, combining and splitting independent streams.",
+    ),
+    (
+        "Unit 3 — Finite-state Markov chains",
+        [6, 7, 8, 9],
+        "Readings: Gallager Chapter 3. Transition matrices, eigenvalue "
+        "analysis, classification of states, Markov rewards and dynamic "
+        "programming.",
+    ),
+    (
+        "Unit 4 — Renewal processes",
+        [10, 11, 12, 13, 14, 15],
+        "Readings: Gallager Chapter 4. Renewal counting processes, the "
+        "strong law and key renewal theorem, renewal-reward processes, "
+        "Wald's inequality, Little's theorem, M/G/1 queues, ensemble "
+        "averages. Lec 14 is a review session.",
+    ),
+    (
+        "Unit 5 — Countable-state Markov chains & processes",
+        [16, 17, 18, 19, 20],
+        "Readings: Gallager Chapters 5 and 6. Countable-state Markov "
+        "chains, classification (transience / null- vs positive-recurrence), "
+        "countable-state Markov processes in continuous time, birth-death "
+        "and queueing applications.",
+    ),
+    (
+        "Unit 6 — Random walks & martingales",
+        [21, 22, 23, 24, 25],
+        "Readings: Gallager Chapter 7. Hypothesis testing, random walks, "
+        "first-passage and threshold problems, martingales (plain, sub-, "
+        "super-), optional stopping, martingale convergence. Lec 25 is a "
+        "full-course wrap-up.",
+    ),
+]
+
+
+# Gallager textbook chapter PDFs (mirrored on OCW). Slug → display title.
+GALLAGER_CHAPTERS: list[tuple[str, str]] = [
+    ("mit6_262s11_front", "Front matter"),
+    ("mit6_262s11_chap01", "Chapter 1"),
+    ("mit6_262s11_chap02", "Chapter 2"),
+    ("mit6_262s11_chap03", "Chapter 3"),
+    ("mit6_262s11_chap04", "Chapter 4"),
+    ("mit6_262s11_chap05", "Chapter 5"),
+    ("mit6_262s11_chap06", "Chapter 6"),
+    ("mit6_262s11_chap07", "Chapter 7"),
+    ("mit6_262s11_back", "Back matter"),
+]
+
+
+def _gallager_chap_url(slug: str) -> str:
+    return f"{BASE}/resources/{slug}/"
+
+
+def _unit_items(lecture_numbers: list[int], readings_md: str) -> list[dict]:
+    """For each lecture: a 'note' item with Gallager chapter+topic as primary
+    text, followed by a [Watch video →] link. Closed with the unit-level
+    Readings note.
+    """
+    items: list[dict] = []
+    for n in lecture_numbers:
+        topic, ref = LECTURE_TOPICS[n]
+        items.append(
+            {
+                "kind": "note",
+                "title": f"Lec {n} — {topic}",
+                "text_md": f"**{ref}.** {topic}.",
+            }
+        )
+        items.append(
+            {
+                "kind": "link",
+                "title": "Watch video →",
+                "url": _video_url(n),
+                "indent": 1,
+            }
+        )
+    items.append({"kind": "note", "title": "Readings", "text_md": readings_md})
+    return items
+
+
+def _direct_links_items() -> list[dict]:
+    return [
+        {"kind": "link", "title": "6.262 course home (Gallager, MIT OCW Spring 2011)", "url": HOME},
+        {"kind": "link", "title": "Syllabus", "url": SYLLABUS_URL},
+        {"kind": "link", "title": "Calendar", "url": CALENDAR_URL},
+        {"kind": "link", "title": "Course notes (Gallager chapter PDFs)", "url": COURSE_NOTES_URL},
+        {"kind": "link", "title": "Assignments index", "url": ASSIGNMENTS_URL},
+        {"kind": "link", "title": "Exams index", "url": EXAMS_URL},
+        {"kind": "link", "title": "Video lectures gallery", "url": VIDEOS_INDEX_URL},
+        {
+            "kind": "link",
+            "title": "Gallager — updated draft notes (web archive)",
+            "url": GALLAGER_NOTES_ARCHIVE_URL,
+        },
+    ]
+
+
+def _gallager_notes_items() -> list[dict]:
+    return [
+        {"kind": "link", "title": title, "url": _gallager_chap_url(slug)}
+        for slug, title in GALLAGER_CHAPTERS
+    ]
+
+
+def _practice_exams_items() -> list[dict]:
+    """Links to all 5 historical papers + their solutions, for browseability.
+    These are NOT graded assignments (see MIDTERM_SPEC / FINAL_SPEC — only the
+    2011 papers are gradable). 10 items total."""
+    out: list[dict] = []
+    for year in (2011, 2010, 2009):
+        out.append(
+            {"kind": "link", "title": f"Midterm {year} — paper", "url": _exam_url("mid", year)}
+        )
+        out.append(
+            {
+                "kind": "link",
+                "title": f"Midterm {year} — solution",
+                "url": _exam_sol_url("mid", year),
+                "indent": 1,
+            }
+        )
+    for year in (2011, 2009):
+        out.append(
+            {"kind": "link", "title": f"Final {year} — paper", "url": _exam_url("final", year)}
+        )
+        out.append(
+            {
+                "kind": "link",
+                "title": f"Final {year} — solution",
+                "url": _exam_sol_url("final", year),
+                "indent": 1,
+            }
+        )
+    return out
+
+
+def _modules() -> list[tuple[str, list[dict]]]:
+    """9 modules total: direct-links + 6 unit modules + Gallager notes + Practice exams."""
+    out: list[tuple[str, list[dict]]] = [("Direct links", _direct_links_items())]
+    for title, lecture_nums, readings_md in UNITS:
+        out.append((title, _unit_items(lecture_nums, readings_md)))
+    out.append(("Gallager course notes", _gallager_notes_items()))
+    out.append(("Practice exams", _practice_exams_items()))
+    return out

@@ -482,3 +482,37 @@ def test_attach_official_solution_graceful_on_failure(db, monkeypatch, tmp_path)
     # URL is still set as a fallback flag; file_path stays empty.
     assert a.official_solution_file_path == ""
     assert a.official_solution_url.endswith("/resources/mit6_262s11_assn01_sol/")
+
+
+def test_seed_uploads_official_solutions(db, monkeypatch, tmp_path):
+    # Stub the resolver to return predictable URLs and the network to return
+    # fake PDFs. Exercises the per-assignment loop end-to-end.
+    def _fake_resolve(slug):
+        return f"https://ocw.mit.edu/fake/{slug}.pdf"
+
+    class _Resp:
+        content = b"%PDF-fake"
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(seed_mod, "_resolve_pdf_url", _fake_resolve)
+    monkeypatch.setattr(seed_mod.httpx, "get", lambda url, **kw: _Resp())
+    monkeypatch.setattr(storage_mod, "_supabase_configured", lambda: False)
+    monkeypatch.setattr(storage_mod, "_LOCAL_ROOT", tmp_path)
+
+    c = seed_mod.seed(db)
+    paths = [a.official_solution_file_path for a in c.assignments]
+    # All 14 graded assignments must have a path.
+    assert len(paths) == 14
+    assert all(p.startswith("official/6_262/") and p.endswith(".pdf") for p in paths)
+    # All 12 PSets present.
+    ps_paths = sorted(
+        p for p in paths if "_assn" in p
+    )
+    assert len(ps_paths) == 12
+    assert ps_paths[0].endswith("mit6_262s11_assn01_sol.pdf")
+    assert ps_paths[-1].endswith("mit6_262s11_assn12_sol.pdf")
+    # Midterm + Final present (2011 papers only).
+    assert any(p.endswith("mit6_262s11_mid11_sol.pdf") for p in paths)
+    assert any(p.endswith("mit6_262s11_final11_sol.pdf") for p in paths)
+    # All URLs set.
+    assert all(a.official_solution_url.startswith(seed_mod.BASE) for a in c.assignments)

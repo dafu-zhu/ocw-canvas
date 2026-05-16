@@ -586,64 +586,65 @@ def seed(db: Session, force: bool = False) -> Course:
     db.add_all([g_ps, g_mid, g_final])
     db.flush()
 
-    # 12 PSets
+    # 12 PSets — create then attach the official solution PDF
     for k, topic, lec_from, lec_to in PROBLEM_SETS:
-        db.add(
-            Assignment(
-                course_id=course.id,
-                assignment_group_id=g_ps.id,
-                title=f"Problem Set {k} — {topic}",
-                description_md=_ps_description(k, topic, lec_from, lec_to),
-                points_possible=100,
-                accepts_files=True,
-                accepts_text=True,
-                position=k - 1,
-                published=True,
-                covers_lecture_from=lec_from,
-                covers_lecture_to=lec_to,
-                requires_solution_key=True,
-            )
+        a = Assignment(
+            course_id=course.id,
+            assignment_group_id=g_ps.id,
+            title=f"Problem Set {k} — {topic}",
+            description_md=_ps_description(k, topic, lec_from, lec_to),
+            points_possible=100,
+            accepts_files=True,
+            accepts_text=True,
+            position=k - 1,
+            published=True,
+            covers_lecture_from=lec_from,
+            covers_lecture_to=lec_to,
+            requires_solution_key=True,
         )
+        db.add(a)
+        db.flush()
+        _attach_official_solution(db, a, f"mit6_262s11_assn{k:02d}_sol")
 
     # Midterm (2011 paper)
     mid_year, mid_from, mid_to, _ = MIDTERM_SPEC
-    db.add(
-        Assignment(
-            course_id=course.id,
-            assignment_group_id=g_mid.id,
-            title=f"Midterm Exam ({mid_year} paper)",
-            description_md=_midterm_description(MIDTERM_SPEC),
-            points_possible=100,
-            accepts_files=True,
-            accepts_text=True,
-            position=0,
-            published=True,
-            covers_lecture_from=mid_from,
-            covers_lecture_to=mid_to,
-            requires_solution_key=True,
-        )
+    a = Assignment(
+        course_id=course.id,
+        assignment_group_id=g_mid.id,
+        title=f"Midterm Exam ({mid_year} paper)",
+        description_md=_midterm_description(MIDTERM_SPEC),
+        points_possible=100,
+        accepts_files=True,
+        accepts_text=True,
+        position=0,
+        published=True,
+        covers_lecture_from=mid_from,
+        covers_lecture_to=mid_to,
+        requires_solution_key=True,
     )
+    db.add(a)
+    db.flush()
+    _attach_official_solution(db, a, f"{_exam_slug('mid', mid_year)}_sol")
 
     # Final (2011 paper)
     fin_year, fin_from, fin_to, _ = FINAL_SPEC
-    db.add(
-        Assignment(
-            course_id=course.id,
-            assignment_group_id=g_final.id,
-            title=f"Final Exam ({fin_year} paper)",
-            description_md=_final_description(FINAL_SPEC),
-            points_possible=100,
-            accepts_files=True,
-            accepts_text=True,
-            position=0,
-            published=True,
-            covers_lecture_from=fin_from,
-            covers_lecture_to=fin_to,
-            requires_solution_key=True,
-        )
+    a = Assignment(
+        course_id=course.id,
+        assignment_group_id=g_final.id,
+        title=f"Final Exam ({fin_year} paper)",
+        description_md=_final_description(FINAL_SPEC),
+        points_possible=100,
+        accepts_files=True,
+        accepts_text=True,
+        position=0,
+        published=True,
+        covers_lecture_from=fin_from,
+        covers_lecture_to=fin_to,
+        requires_solution_key=True,
     )
-
+    db.add(a)
     db.flush()
+    _attach_official_solution(db, a, f"{_exam_slug('final', fin_year)}_sol")
 
     for mpos, (mtitle, items) in enumerate(_modules()):
         m = Module(course_id=course.id, title=mtitle, position=mpos, published=True)

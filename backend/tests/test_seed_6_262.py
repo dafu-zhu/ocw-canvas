@@ -202,68 +202,40 @@ def test_exam_specs():
 
 def test_modules_shape():
     mods = _modules()
-    assert [m[0] for m in mods] == [
-        "Direct links",
-        "Unit 1 — Probability review & Bernoulli",
-        "Unit 2 — Poisson processes",
-        "Unit 3 — Finite-state Markov chains",
-        "Unit 4 — Renewal processes",
-        "Unit 5 — Countable-state Markov chains & processes",
-        "Unit 6 — Random walks & martingales",
-        "Gallager course notes",
-        "Practice exams",
-    ]
-
-
-def test_modules_per_lecture_note_pattern():
-    mods = _modules()
-    # Each Unit module has 2*N + 1 items per its lecture count:
-    # for each lecture, a 'note' item + a 'link' "Watch video →" child item;
-    # closed by a unit-level 'note' "Readings".
-    expected_lecture_counts = {
-        "Unit 1 — Probability review & Bernoulli":              3,   # lec 1-3
-        "Unit 2 — Poisson processes":                           2,   # lec 4-5
-        "Unit 3 — Finite-state Markov chains":                  4,   # lec 6-9
-        "Unit 4 — Renewal processes":                           6,   # lec 10-15
-        "Unit 5 — Countable-state Markov chains & processes":   5,   # lec 16-20
-        "Unit 6 — Random walks & martingales":                  5,   # lec 21-25
-    }
-    by_title = dict(mods)
-    for title, count in expected_lecture_counts.items():
-        items = by_title[title]
-        assert len(items) == 2 * count + 1, f"unit {title!r}: got {len(items)} items"
-        # First item per lecture must be a note; the [Watch video →] link follows.
-        for i in range(count):
-            assert items[2 * i]["kind"] == "note"
-            assert items[2 * i + 1]["kind"] == "link"
-            assert items[2 * i + 1]["title"] == "Watch video →"
-        # Trailing readings note.
-        assert items[-1]["kind"] == "note"
-        assert items[-1]["title"] == "Readings"
+    # Three modules mirror OCW's natural structure — no per-lecture units, no
+    # inline video links. See feedback memory feedback-module-content-chapter-readings.
+    assert [m[0] for m in mods] == ["Direct links", "Course Notes", "Practice exams"]
 
 
 def test_modules_practice_exams_links():
     mods = dict(_modules())
     items = mods["Practice exams"]
-    # 5 papers + 5 solutions = 10 link items.
-    assert len(items) == 10
+    # Only practice years — graded 2011 papers live in the Assignments tree,
+    # not here. 2 midterm years + 1 final year = 3 papers + 3 solutions = 6 items.
+    assert len(items) == 6
     titles = [i["title"] for i in items]
-    assert "Midterm 2011 — paper" in titles
     assert "Midterm 2010 — paper" in titles
     assert "Midterm 2009 — paper" in titles
-    assert "Final 2011 — paper" in titles
     assert "Final 2009 — paper" in titles
-    assert "Midterm 2011 — solution" in titles
+    assert "Midterm 2010 — solution" in titles
+    assert "Midterm 2009 — solution" in titles
     assert "Final 2009 — solution" in titles
+    # 2011 papers MUST NOT appear anywhere in Modules — they're graded
+    # Assignments, not browseable.
+    assert "Midterm 2011 — paper" not in titles
+    assert "Midterm 2011 — solution" not in titles
+    assert "Final 2011 — paper" not in titles
+    assert "Final 2011 — solution" not in titles
     for it in items:
         assert it["kind"] == "link"
         assert "ocw.mit.edu" in it["url"]
 
 
-def test_modules_gallager_notes_links_chapter_pdfs():
+def test_modules_course_notes_links_chapter_pdfs():
     mods = dict(_modules())
-    items = mods["Gallager course notes"]
-    # Front matter + 7 chapters + back matter = 9 link items.
+    items = mods["Course Notes"]
+    # Front matter + 7 chapters + back matter = 9 link items, mirroring OCW's
+    # /pages/course-notes/ index.
     assert len(items) == 9
     titles = [i["title"] for i in items]
     assert "Front matter" in titles
@@ -273,6 +245,18 @@ def test_modules_gallager_notes_links_chapter_pdfs():
     for it in items:
         assert it["kind"] == "link"
         assert "mit6_262s11_" in it["url"]
+
+
+def test_modules_no_video_items():
+    """Per feedback-module-content-chapter-readings Rule 1: video links never
+    appear in Modules. No item should be `kind="video"` or have a video URL."""
+    for _title, items in _modules():
+        for it in items:
+            assert it["kind"] != "video"
+            url = it.get("url", "") or ""
+            # The video-gallery landing URL is allowed in Direct links; per-lecture
+            # video resource URLs (slug pattern "/resources/lecture-N-...") are not.
+            assert "/resources/lecture-" not in url
 
 
 def test_syllabus_contains_grading_split():
@@ -327,10 +311,12 @@ def test_seed_assignment_counts(db):
     n_modules = len(c.modules)
     n_items = sum(len(m.items) for m in c.modules)
     n_assign = len(c.assignments)
-    # 9 modules. 14 assignments = 12 PSets + 1 midterm + 1 final.
-    assert n_modules == 9
+    # 3 modules (Direct links + Course Notes + Practice exams).
+    # 14 assignments = 12 PSets + 1 midterm + 1 final.
+    # 8 direct-links + 9 Course Notes + 6 practice exams = 23 module items.
+    assert n_modules == 3
     assert n_assign == 14
-    assert n_items > 50  # 9 + (2*lec + 1) per unit + 9 + 10 — sanity floor
+    assert n_items == 23
 
 
 def test_seed_problem_set_coverage(db):

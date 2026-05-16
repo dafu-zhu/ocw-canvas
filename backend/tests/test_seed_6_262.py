@@ -421,7 +421,8 @@ def test_attach_official_solution_happy_path(db, monkeypatch, tmp_path):
     db.refresh(a)
 
     assert a.official_solution_file_path == "official/6_262/mit6_262s11_assn01_sol.pdf"
-    assert a.official_solution_url.endswith("/resources/mit6_262s11_assn01_sol/")
+    # On success the URL is cleared so resolve_key picks the file branch.
+    assert a.official_solution_url == ""
     stored = storage_mod.read_bytes("solutions", a.official_solution_file_path)
     assert stored == b"%PDF-1.4\nfakebytes"
 
@@ -451,6 +452,8 @@ def test_attach_official_solution_idempotent(db, monkeypatch, tmp_path):
     db.commit()
     # Still set, unchanged.
     assert a.official_solution_file_path == "official/6_262/mit6_262s11_assn01_sol.pdf"
+    # URL was never set in this test and the idempotent skip path must not touch it.
+    assert a.official_solution_url == ""
 
 
 def test_attach_official_solution_redownloads_when_storage_object_missing(
@@ -482,8 +485,10 @@ def test_attach_official_solution_redownloads_when_storage_object_missing(
     db.commit()
     db.refresh(a)
 
-    # File path unchanged (already matched the storage_key); URL set; bytes now present.
+    # File path unchanged (already matched the storage_key); URL cleared on
+    # successful re-download; bytes now present.
     assert a.official_solution_file_path == "official/6_262/mit6_262s11_assn01_sol.pdf"
+    assert a.official_solution_url == ""
     stored = storage_mod.read_bytes("solutions", a.official_solution_file_path)
     assert stored == b"fresh-pdf-bytes"
 
@@ -537,8 +542,10 @@ def test_seed_uploads_official_solutions(db, monkeypatch, tmp_path):
     # Midterm + Final present (2011 papers only).
     assert any(p.endswith("mit6_262s11_mid11_sol.pdf") for p in paths)
     assert any(p.endswith("mit6_262s11_final11_sol.pdf") for p in paths)
-    # All URLs set.
-    assert all(a.official_solution_url.startswith(seed_mod.BASE) for a in c.assignments)
+    # All URLs cleared — the autouse fixture's mocks succeed by default, so
+    # every assignment goes through the success path which clears the URL
+    # (resolve_key then picks the file branch).
+    assert all(a.official_solution_url == "" for a in c.assignments)
 
 
 def test_update_urls_refreshes_module_items(db):
@@ -584,11 +591,14 @@ def test_update_urls_refreshes_assignment_fields(db):
     mid = next(a for a in c.assignments if a.title.startswith("Midterm Exam"))
     fin = next(a for a in c.assignments if a.title.startswith("Final Exam"))
 
-    # Corrupt all three fields on PS1 + descriptions on midterm and final.
+    # Corrupt description + coverage on PS1; descriptions on midterm and final.
+    # NOTE: We don't corrupt official_solution_url here — after seed (success
+    # path) file_path is set so update_urls deliberately leaves the URL alone
+    # to preserve the empty-URL state that lets resolve_key pick the file
+    # branch. See _attach_official_solution.
     ps1.description_md = "STALE"
     ps1.covers_lecture_from = 999
     ps1.covers_lecture_to = 999
-    ps1.official_solution_url = "https://example.com/STALE"
     mid.description_md = "STALE-MID"
     fin.description_md = "STALE-FIN"
     db.commit()
@@ -604,7 +614,8 @@ def test_update_urls_refreshes_assignment_fields(db):
     assert ps1.description_md != "STALE"
     assert ps1.covers_lecture_from == 1
     assert ps1.covers_lecture_to == 3
-    assert ps1.official_solution_url == seed_mod._ps_sol_url(1)
+    # URL stays empty because file_path is set (seed succeeded).
+    assert ps1.official_solution_url == ""
     assert mid.description_md != "STALE-MID"
     assert fin.description_md != "STALE-FIN"
 

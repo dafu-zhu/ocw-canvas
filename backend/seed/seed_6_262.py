@@ -148,17 +148,18 @@ def _storage_key_for(slug: str) -> str:
 def _attach_official_solution(db: Session, a: Assignment, slug: str) -> None:
     """Download Gallager's solution PDF for ``slug`` and attach it to ``a``.
 
+    Sets ``a.official_solution_file_path`` to the Storage key on success;
+    ``a.official_solution_url`` stays empty so the AI grader resolves to the
+    'official_file' branch and reads the PDF. On download/upload failure,
+    falls back to setting ``official_solution_url`` only — the AI grader
+    then uses the URL-only branch ("official solution exists at <url>; grade
+    against standard rigor"). Either way the seed doesn't abort.
+
     Idempotent: if ``a.official_solution_file_path`` already points at a
     readable Storage object, do nothing.
-
-    Graceful: any download/upload failure is logged to stdout and leaves
-    ``official_solution_url`` set as the AI's URL-only fallback.
     """
     storage_key = _storage_key_for(slug)
     landing_url = f"{BASE}/resources/{slug}/"
-
-    # Always set the URL — it's cheap and serves as a fallback flag.
-    a.official_solution_url = landing_url
 
     if a.official_solution_file_path == storage_key:
         try:
@@ -175,8 +176,13 @@ def _attach_official_solution(db: Session, a: Assignment, slug: str) -> None:
         # Storage write commits immediately; the file_path assignment below
         # only persists on the caller's db.commit().
         a.official_solution_file_path = storage_key
+        # Clear the URL so resolve_key picks the file branch — see
+        # app.services.ai_jobs.resolve_key (URL > file_path precedence).
+        a.official_solution_url = ""
     except Exception as exc:  # noqa: BLE001
-        # Don't break the seed for one missing solution; degrade to URL-only.
+        # Download/upload failed — degrade to URL-only mode so the AI grader
+        # at least knows an official solution exists somewhere.
+        a.official_solution_url = landing_url
         print(f"warn(seed_6_262): solution upload failed for {slug}: {exc}")
 
 
@@ -786,10 +792,14 @@ def update_urls(db: Session) -> dict:
             a.covers_lecture_from = lec_from
             a.covers_lecture_to = lec_to
             counts["coverage_updated"] += 1
-        new_url = _ps_sol_url(k)
-        if a.official_solution_url != new_url:
-            a.official_solution_url = new_url
-            dirty_assignments.add(a.id)
+        # Only refresh the URL when the file_path is empty (i.e. we're in
+        # URL-only fallback mode). Otherwise clearing it on a successful seed
+        # — see _attach_official_solution — must stick.
+        if not a.official_solution_file_path:
+            new_url = _ps_sol_url(k)
+            if a.official_solution_url != new_url:
+                a.official_solution_url = new_url
+                dirty_assignments.add(a.id)
 
     for title_re, spec, kind, builder in (
         (_MIDTERM_TITLE_RE, MIDTERM_SPEC, "mid", _midterm_description),
@@ -810,10 +820,13 @@ def update_urls(db: Session) -> dict:
             a.covers_lecture_from = lec_from
             a.covers_lecture_to = lec_to
             counts["coverage_updated"] += 1
-        new_url = _exam_sol_url(kind, year)
-        if a.official_solution_url != new_url:
-            a.official_solution_url = new_url
-            dirty_assignments.add(a.id)
+        # Only refresh the URL when the file_path is empty (URL-only fallback
+        # mode); otherwise the successful-seed clear must stick.
+        if not a.official_solution_file_path:
+            new_url = _exam_sol_url(kind, year)
+            if a.official_solution_url != new_url:
+                a.official_solution_url = new_url
+                dirty_assignments.add(a.id)
 
     counts["assignments_updated"] = len(dirty_assignments)
 

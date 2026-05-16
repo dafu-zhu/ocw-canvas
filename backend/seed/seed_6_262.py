@@ -27,17 +27,11 @@ from __future__ import annotations
 
 import argparse  # noqa: F401 — used in later tasks (CLI in main())
 
-from sqlalchemy.orm import Session  # noqa: F401 — used in later tasks
+from sqlalchemy.orm import Session
 
-from app.db import SessionLocal  # noqa: F401 — used in later tasks
-from app.models import (  # noqa: F401 — used in later tasks
-    Assignment,
-    AssignmentGroup,
-    Course,
-    Module,
-    ModuleItem,
-)
-from app.services import storage  # noqa: F401 — used in later tasks
+from app.db import SessionLocal  # noqa: F401 — used in later tasks (main() CLI)
+from app.models import Assignment, AssignmentGroup, Course, Module, ModuleItem
+from app.services import storage  # noqa: F401 — used in later tasks (PDF upload)
 
 CODE = "MIT 6.262"
 BASE = (
@@ -410,3 +404,194 @@ TEXTBOOK = (
     "chapter-by-chapter. Bertsekas-Tsitsiklis, Introduction to "
     "Probability (Athena 2008), is the prereq probability text."
 )
+
+
+def _ps_description(k: int, topic: str, lec_from: int, lec_to: int) -> str:
+    paper_url = _ps_url(k)
+    sol_url = _ps_sol_url(k)
+    return (
+        f"Problem Set {k} ({topic}). Covers lectures {lec_from}–{lec_to}.\n\n"
+        f"- Paper: [PS{k} PDF (landing page)]({paper_url})\n"
+        f"- Reference solution: [PS{k} Solution (landing page)]({sol_url})\n\n"
+        "Upload your worked solutions. The AI grades against Gallager's "
+        "official solution (loaded from Storage). OCW publishes the public "
+        "solution PDF at the link above."
+    )
+
+
+def _midterm_description(spec: tuple[int, int, int, tuple[int, ...]]) -> str:
+    year, _f, _to, practice = spec
+    paper_url = _exam_url("mid", year)
+    sol_url = _exam_sol_url("mid", year)
+    lines = [
+        f"Midterm Quiz ({year} paper). Closed-book exam covering lectures 1–14.",
+        "",
+        f"- Paper: [{year} Midterm PDF]({paper_url})",
+        f"- Reference solution: [{year} Midterm Solution]({sol_url})",
+        "",
+        "## Additional practice papers",
+    ]
+    for py in practice:
+        lines.append(
+            f"- Midterm {py}: [paper]({_exam_url('mid', py)}) · "
+            f"[solution]({_exam_sol_url('mid', py)})"
+        )
+    lines.append("")
+    lines.append(
+        "Time yourself (80 minutes for the 2011 paper, matching the original "
+        "course). Upload your attempt; the AI grades against Gallager's "
+        "solution. The practice papers above are *not* graded — they're for "
+        "self-paced review."
+    )
+    return "\n".join(lines)
+
+
+def _final_description(spec: tuple[int, int, int, tuple[int, ...]]) -> str:
+    year, _f, _to, practice = spec
+    paper_url = _exam_url("final", year)
+    sol_url = _exam_sol_url("final", year)
+    lines = [
+        f"Final Exam ({year} paper). Cumulative; emphasises lectures 15–25.",
+        "",
+        f"- Paper: [{year} Final PDF]({paper_url})",
+        f"- Reference solution: [{year} Final Solution]({sol_url})",
+        "",
+        "## Additional practice papers",
+    ]
+    for py in practice:
+        lines.append(
+            f"- Final {py}: [paper]({_exam_url('final', py)}) · "
+            f"[solution]({_exam_sol_url('final', py)})"
+        )
+    lines.append("")
+    lines.append(
+        "Time yourself (3 hours, matching the original course). Upload your "
+        "attempt; the AI grades against Gallager's solution. The practice "
+        "papers above are *not* graded — they're for self-paced review."
+    )
+    return "\n".join(lines)
+
+
+def _delete_existing(db: Session) -> None:
+    for c in db.query(Course).filter(Course.code == CODE).all():
+        db.delete(c)
+    db.commit()
+
+
+def seed(db: Session, force: bool = False) -> Course:
+    existing = db.query(Course).filter(Course.code == CODE).first()
+    if existing is not None:
+        if not force:
+            return existing
+        _delete_existing(db)
+
+    course = Course(
+        code=CODE,
+        title="Discrete Stochastic Processes",
+        institution="Massachusetts Institute of Technology",
+        term_label="Summer 2028",  # user's self-study term, not OCW recording year
+        instructor="Prof. Robert Gallager",
+        external_home_url=HOME,
+        status="planned",
+        color="#4A2C82",  # deep purple — distinct from cardinal/teal/navy/tartan
+        display_order=4,
+        textbook=TEXTBOOK,
+        home_page_md=HOME_MD,
+        syllabus_md=SYLLABUS_MD,
+        description=DESCRIPTION,
+    )
+    db.add(course)
+    db.flush()
+
+    g_ps = AssignmentGroup(
+        course_id=course.id, name="Problem Sets", weight=20, drop_lowest_n=0, position=0
+    )
+    g_mid = AssignmentGroup(
+        course_id=course.id, name="Midterm Quiz", weight=35, drop_lowest_n=0, position=1
+    )
+    g_final = AssignmentGroup(
+        course_id=course.id, name="Final Exam", weight=45, drop_lowest_n=0, position=2
+    )
+    db.add_all([g_ps, g_mid, g_final])
+    db.flush()
+
+    # 12 PSets
+    for k, topic, lec_from, lec_to in PROBLEM_SETS:
+        db.add(
+            Assignment(
+                course_id=course.id,
+                assignment_group_id=g_ps.id,
+                title=f"Problem Set {k} — {topic}",
+                description_md=_ps_description(k, topic, lec_from, lec_to),
+                points_possible=100,
+                accepts_files=True,
+                accepts_text=True,
+                position=k - 1,
+                published=True,
+                covers_lecture_from=lec_from,
+                covers_lecture_to=lec_to,
+                requires_solution_key=True,
+            )
+        )
+
+    # Midterm (2011 paper)
+    mid_year, mid_from, mid_to, _ = MIDTERM_SPEC
+    db.add(
+        Assignment(
+            course_id=course.id,
+            assignment_group_id=g_mid.id,
+            title=f"Midterm Exam ({mid_year} paper)",
+            description_md=_midterm_description(MIDTERM_SPEC),
+            points_possible=100,
+            accepts_files=True,
+            accepts_text=True,
+            position=0,
+            published=True,
+            covers_lecture_from=mid_from,
+            covers_lecture_to=mid_to,
+            requires_solution_key=True,
+        )
+    )
+
+    # Final (2011 paper)
+    fin_year, fin_from, fin_to, _ = FINAL_SPEC
+    db.add(
+        Assignment(
+            course_id=course.id,
+            assignment_group_id=g_final.id,
+            title=f"Final Exam ({fin_year} paper)",
+            description_md=_final_description(FINAL_SPEC),
+            points_possible=100,
+            accepts_files=True,
+            accepts_text=True,
+            position=0,
+            published=True,
+            covers_lecture_from=fin_from,
+            covers_lecture_to=fin_to,
+            requires_solution_key=True,
+        )
+    )
+
+    db.flush()
+
+    for mpos, (mtitle, items) in enumerate(_modules()):
+        m = Module(course_id=course.id, title=mtitle, position=mpos, published=True)
+        db.add(m)
+        db.flush()
+        for ipos, it in enumerate(items):
+            db.add(
+                ModuleItem(
+                    module_id=m.id,
+                    position=ipos,
+                    indent=it.get("indent", 0),
+                    kind=it["kind"],
+                    title=it.get("title", ""),
+                    external_url=it.get("url", ""),
+                    text_md=it.get("text_md", ""),
+                    assignment_id=None,
+                    published=True,
+                )
+            )
+    db.commit()
+    db.refresh(course)
+    return course

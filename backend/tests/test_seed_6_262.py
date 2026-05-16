@@ -17,6 +17,7 @@ from seed.seed_6_262 import (
     _ps_sol_url,
     _ps_url,
     _video_url,
+    seed,
 )
 
 
@@ -187,3 +188,65 @@ def test_description_and_textbook_nonempty():
     assert "Markov" in DESCRIPTION
     assert "Gallager" in TEXTBOOK
     assert "Stochastic Processes" in TEXTBOOK
+
+
+def test_seed_creates_6_262_basic_shape(db):
+    c = seed(db)
+    assert c.code == "MIT 6.262"
+    assert c.title == "Discrete Stochastic Processes"
+    assert c.instructor == "Prof. Robert Gallager"
+    assert c.institution == "Massachusetts Institute of Technology"
+    assert c.term_label == "Summer 2028"
+    assert c.color == "#4A2C82"
+    assert c.display_order == 4
+    assert c.status == "planned"
+    assert c.external_home_url.startswith(
+        "https://ocw.mit.edu/courses/6-262-discrete-stochastic-processes-spring-2011"
+    )
+
+
+def test_seed_groups_and_weights(db):
+    c = seed(db)
+    weights = {g.name: (float(g.weight), g.drop_lowest_n) for g in c.assignment_groups}
+    assert weights["Problem Sets"] == (20.0, 0)
+    assert weights["Midterm Quiz"] == (35.0, 0)
+    assert weights["Final Exam"] == (45.0, 0)
+    assert sum(w for w, _ in weights.values()) == 100.0
+
+
+def test_seed_assignment_counts(db):
+    c = seed(db)
+    n_modules = len(c.modules)
+    n_items = sum(len(m.items) for m in c.modules)
+    n_assign = len(c.assignments)
+    # 9 modules. 14 assignments = 12 PSets + 1 midterm + 1 final.
+    assert n_modules == 9
+    assert n_assign == 14
+    assert n_items > 50  # 9 + (2*lec + 1) per unit + 9 + 10 — sanity floor
+
+
+def test_seed_problem_set_coverage(db):
+    c = seed(db)
+    psets = sorted(
+        (a for a in c.assignments if a.title.startswith("Problem Set")),
+        key=lambda a: a.position,
+    )
+    assert len(psets) == 12
+    assert all(p.requires_solution_key for p in psets)
+    assert psets[0].covers_lecture_from == 1
+    assert psets[0].covers_lecture_to == 3
+    assert psets[-1].covers_lecture_from == 24
+    assert psets[-1].covers_lecture_to == 25
+
+
+def test_seed_midterm_and_final(db):
+    c = seed(db)
+    mid = next(a for a in c.assignments if a.title.startswith("Midterm Exam"))
+    fin = next(a for a in c.assignments if a.title.startswith("Final Exam"))
+    assert mid.covers_lecture_from == 1
+    assert mid.covers_lecture_to == 14
+    assert fin.covers_lecture_from == 15
+    assert fin.covers_lecture_to == 25
+    # Description references the 2011 paper and lists practice years.
+    assert "2010" in mid.description_md and "2009" in mid.description_md
+    assert "2009" in fin.description_md

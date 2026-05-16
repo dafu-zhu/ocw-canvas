@@ -1,3 +1,4 @@
+from app.models import Course
 from seed.seed_6_262 import (
     BASE,
     CODE,
@@ -250,3 +251,19 @@ def test_seed_midterm_and_final(db):
     # Description references the 2011 paper and lists practice years.
     assert "2010" in mid.description_md and "2009" in mid.description_md
     assert "2009" in fin.description_md
+
+
+def test_seed_is_idempotent(db):
+    c1 = seed(db)
+    n1 = (len(c1.modules), len(c1.assignments))
+    c2 = seed(db)
+    assert c2.id == c1.id
+    assert (len(c2.modules), len(c2.assignments)) == n1
+    assert db.query(Course).filter(Course.code == "MIT 6.262").count() == 1
+
+
+def test_seed_force_recreates(db):
+    seed(db)
+    c = seed(db, force=True)
+    assert db.query(Course).filter(Course.code == "MIT 6.262").count() == 1
+    assert len(c.assignments) == 14

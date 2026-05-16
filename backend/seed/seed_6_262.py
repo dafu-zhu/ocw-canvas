@@ -245,54 +245,6 @@ MIDTERM_SPEC: tuple[int, int, int, tuple[int, ...]] = (2011, 1, 14, (2010, 2009)
 FINAL_SPEC: tuple[int, int, int, tuple[int, ...]] = (2011, 15, 25, (2009,))
 
 
-# Module unit definitions: (module_title, [lecture_numbers], readings_md).
-UNITS: list[tuple[str, list[int], str]] = [
-    (
-        "Unit 1 — Probability review & Bernoulli",
-        [1, 2, 3],
-        "Readings: Gallager Chapter 1. Probability spaces, expectations, "
-        "convergence; the Bernoulli process.",
-    ),
-    (
-        "Unit 2 — Poisson processes",
-        [4, 5],
-        "Readings: Gallager Chapter 2. The Poisson process, its memoryless "
-        "structure, combining and splitting independent streams.",
-    ),
-    (
-        "Unit 3 — Finite-state Markov chains",
-        [6, 7, 8, 9],
-        "Readings: Gallager Chapter 3. Transition matrices, eigenvalue "
-        "analysis, classification of states, Markov rewards and dynamic "
-        "programming.",
-    ),
-    (
-        "Unit 4 — Renewal processes",
-        [10, 11, 12, 13, 14, 15],
-        "Readings: Gallager Chapter 4. Renewal counting processes, the "
-        "strong law and key renewal theorem, renewal-reward processes, "
-        "Wald's inequality, Little's theorem, M/G/1 queues, ensemble "
-        "averages. Lec 14 is a review session.",
-    ),
-    (
-        "Unit 5 — Countable-state Markov chains & processes",
-        [16, 17, 18, 19, 20],
-        "Readings: Gallager Chapters 5 and 6. Countable-state Markov "
-        "chains, classification (transience / null- vs positive-recurrence), "
-        "countable-state Markov processes in continuous time, birth-death "
-        "and queueing applications.",
-    ),
-    (
-        "Unit 6 — Random walks & martingales",
-        [21, 22, 23, 24, 25],
-        "Readings: Gallager Chapter 7. Hypothesis testing, random walks, "
-        "first-passage and threshold problems, martingales (plain, sub-, "
-        "super-), optional stopping, martingale convergence. Lec 25 is a "
-        "full-course wrap-up.",
-    ),
-]
-
-
 # Gallager textbook chapter PDFs (mirrored on OCW). Slug → display title.
 GALLAGER_CHAPTERS: list[tuple[str, str]] = [
     ("mit6_262s11_front", "Front matter"),
@@ -309,33 +261,6 @@ GALLAGER_CHAPTERS: list[tuple[str, str]] = [
 
 def _gallager_chap_url(slug: str) -> str:
     return f"{BASE}/resources/{slug}/"
-
-
-def _unit_items(lecture_numbers: list[int], readings_md: str) -> list[dict]:
-    """For each lecture: a 'note' item with Gallager chapter+topic as primary
-    text, followed by a [Watch video →] link. Closed with the unit-level
-    Readings note.
-    """
-    items: list[dict] = []
-    for n in lecture_numbers:
-        topic, ref = LECTURE_TOPICS[n]
-        items.append(
-            {
-                "kind": "note",
-                "title": f"Lec {n} — {topic}",
-                "text_md": f"**{ref}.** {topic}.",
-            }
-        )
-        items.append(
-            {
-                "kind": "link",
-                "title": "Watch video →",
-                "url": _video_url(n),
-                "indent": 1,
-            }
-        )
-    items.append({"kind": "note", "title": "Readings", "text_md": readings_md})
-    return items
 
 
 def _direct_links_items() -> list[dict]:
@@ -362,12 +287,20 @@ def _gallager_notes_items() -> list[dict]:
     ]
 
 
+_PRACTICE_MIDTERM_YEARS: tuple[int, ...] = MIDTERM_SPEC[3]  # (2010, 2009)
+_PRACTICE_FINAL_YEARS: tuple[int, ...] = FINAL_SPEC[3]  # (2009,)
+
+
 def _practice_exams_items() -> list[dict]:
-    """Links to all 5 historical papers + their solutions, for browseability.
-    These are NOT graded assignments (see MIDTERM_SPEC / FINAL_SPEC — only the
-    2011 papers are gradable). 10 items total."""
+    """Links to *older* exam years only — paper + indented solution per year.
+
+    The latest year (per ``MIDTERM_SPEC`` / ``FINAL_SPEC`` — currently 2011) is
+    the graded Assignment and does NOT appear here; a real teacher wouldn't
+    publish the actual graded test + solution under "Modules". See feedback
+    memory ``feedback-module-content-chapter-readings`` Rule 3.
+    """
     out: list[dict] = []
-    for year in (2011, 2010, 2009):
+    for year in _PRACTICE_MIDTERM_YEARS:
         out.append(
             {"kind": "link", "title": f"Midterm {year} — paper", "url": _exam_url("mid", year)}
         )
@@ -379,7 +312,7 @@ def _practice_exams_items() -> list[dict]:
                 "indent": 1,
             }
         )
-    for year in (2011, 2009):
+    for year in _PRACTICE_FINAL_YEARS:
         out.append(
             {"kind": "link", "title": f"Final {year} — paper", "url": _exam_url("final", year)}
         )
@@ -395,13 +328,23 @@ def _practice_exams_items() -> list[dict]:
 
 
 def _modules() -> list[tuple[str, list[dict]]]:
-    """9 modules total: direct-links + 6 unit modules + Gallager notes + Practice exams."""
-    out: list[tuple[str, list[dict]]] = [("Direct links", _direct_links_items())]
-    for title, lecture_nums, readings_md in UNITS:
-        out.append((title, _unit_items(lecture_nums, readings_md)))
-    out.append(("Gallager course notes", _gallager_notes_items()))
-    out.append(("Practice exams", _practice_exams_items()))
-    return out
+    """Three modules, mirroring the natural structure of OCW's pages:
+
+      1. "Direct links" — top-of-course navigation (syllabus, calendar, etc).
+      2. "Course Notes" — Gallager's chapter PDFs, mirroring OCW's Course
+         Notes page (front matter + Ch 1–7 + back matter = 9 items).
+      3. "Practice exams" — older-year papers + solutions (the graded 2011
+         papers live in the Assignments tree, not here).
+
+    No per-lecture unit modules and no inline video-link items — videos are
+    surfaced through the separate Video Lectures section. See feedback memory
+    ``feedback-module-content-chapter-readings``.
+    """
+    return [
+        ("Direct links", _direct_links_items()),
+        ("Course Notes", _gallager_notes_items()),
+        ("Practice exams", _practice_exams_items()),
+    ]
 
 
 SYLLABUS_MD = """## Prerequisites
@@ -677,7 +620,6 @@ def seed(db: Session, force: bool = False) -> Course:
 
 # --------------------------------------------------------------------------- updater
 
-_LECTURE_NOTE_RE = re.compile(r"^Lec (\d+)\b")
 _MIDTERM_TITLE_RE = re.compile(r"^Midterm Exam \((\d{4}) paper\)")
 _FINAL_TITLE_RE = re.compile(r"^Final Exam \((\d{4}) paper\)")
 
@@ -696,20 +638,22 @@ def _fixed_title_to_url() -> dict[str, str]:
     }
     for slug, title in GALLAGER_CHAPTERS:
         out[title] = _gallager_chap_url(slug)
-    for year in (2011, 2010, 2009):
+    # Practice-exam years only — the latest year is the graded Assignment and
+    # is intentionally absent from any Module (see _practice_exams_items).
+    for year in _PRACTICE_MIDTERM_YEARS:
         out[f"Midterm {year} — paper"] = _exam_url("mid", year)
         out[f"Midterm {year} — solution"] = _exam_sol_url("mid", year)
-    for year in (2011, 2009):
+    for year in _PRACTICE_FINAL_YEARS:
         out[f"Final {year} — paper"] = _exam_url("final", year)
         out[f"Final {year} — solution"] = _exam_sol_url("final", year)
     return out
 
 
 def update_urls(db: Session) -> dict:
-    """Refresh URLs on the live MIT 6.262 course in place — module-item URLs,
-    per-lecture note text, and assignment description_md / coverage / URL.
-    Does NOT re-download PDFs (use --refresh-solutions for that). Preserves
-    submissions / AI solutions / announcements / grades.
+    """Refresh URLs on the live MIT 6.262 course in place — module-item URLs
+    and assignment description_md / coverage / URL. Does NOT re-download PDFs
+    (use --refresh-solutions for that). Preserves submissions / AI solutions /
+    announcements / grades.
 
     Counter semantics:
       - ``items_examined`` / ``items_updated``: per module-item.
@@ -732,7 +676,7 @@ def update_urls(db: Session) -> dict:
 
     fixed = _fixed_title_to_url()
 
-    # 1) Module-item external URLs.
+    # Module-item external URLs.
     for m in course.modules:
         for it in m.items:
             counts["items_examined"] += 1
@@ -741,37 +685,8 @@ def update_urls(db: Session) -> dict:
                 if new_url != it.external_url:
                     it.external_url = new_url
                     counts["items_updated"] += 1
-            if it.title == "Watch video →":
-                # Look back at preceding sibling "Lec N — ..." note to find N.
-                mn = None
-                for prev in m.items:
-                    if prev.position == it.position - 1:
-                        mn = _LECTURE_NOTE_RE.match(prev.title or "")
-                        break
-                if mn:
-                    n = int(mn.group(1))
-                    new_url = _video_url(n)
-                    if new_url != it.external_url:
-                        it.external_url = new_url
-                        counts["items_updated"] += 1
 
-    # 2) Per-lecture note text (refresh Gallager chapter ref).
-    for m in course.modules:
-        for it in m.items:
-            mn = _LECTURE_NOTE_RE.match(it.title or "")
-            if not mn:
-                continue
-            n = int(mn.group(1))
-            spec = LECTURE_TOPICS.get(n)
-            if spec is None:
-                continue
-            topic, ref = spec
-            new_text = f"**{ref}.** {topic}."
-            if it.text_md != new_text:
-                it.text_md = new_text
-                counts["items_updated"] += 1
-
-    # 3) Assignments: refresh description_md, coverage, official_solution_url.
+    # Assignments: refresh description_md, coverage, official_solution_url.
     dirty_assignments: set[str] = set()
     by_title = {a.title: a for a in course.assignments}
     for k, topic, lec_from, lec_to in PROBLEM_SETS:

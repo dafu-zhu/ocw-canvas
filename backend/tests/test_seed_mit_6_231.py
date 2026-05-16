@@ -7,6 +7,7 @@ from app.services import storage as storage_mod
 from seed.seed_mit_6_231 import (
     BASE,
     CODE,
+    COMPLETE_SLIDES_SLUG,
     DESCRIPTION,
     HOME,
     HOME_MD,
@@ -17,8 +18,10 @@ from seed.seed_mit_6_231 import (
     PROBLEM_SETS,
     PROJECT_COVERS_FROM,
     PROJECT_COVERS_TO,
+    SUMMER_2012_NOTES,
     SYLLABUS_MD,
     TEXTBOOK,
+    TSINGHUA_2014_LECTURES,
     _hw8_url,
     _lec_url,
     _midterm_sol_url,
@@ -27,6 +30,7 @@ from seed.seed_mit_6_231 import (
     _project_topics_url,
     _ps_sol_url,
     _resolve_pdf_url,
+    _resource_url,
     refresh_solutions,
     seed,
     update_urls,
@@ -218,6 +222,8 @@ def test_modules_shape():
         "Lecture Slides",
         "Project Resources",
         "Practice Midterms",
+        "Approximate DP — Short-course lecture notes (Bertsekas 2014 + 2012)",
+        "Video Lectures (Bertsekas 2014 Tsinghua)",
     ]
 
 
@@ -268,11 +274,100 @@ def test_modules_practice_midterms_links():
             assert it.get("indent", 0) == 1
 
 
-def test_modules_only_link_kind_items():
-    """Per feedback-module-content-chapter-readings Rule 1: no video items."""
-    for _title, items in _modules():
+_NON_VIDEO_MODULES = {
+    "Direct links",
+    "Lecture Slides",
+    "Project Resources",
+    "Practice Midterms",
+    "Approximate DP — Short-course lecture notes (Bertsekas 2014 + 2012)",
+}
+
+
+def test_non_video_modules_have_no_video_items():
+    """Per feedback-module-content-chapter-readings Rule 1: ``kind="video"``
+    items only appear in the dedicated Video Lectures module (which the
+    Modules page filters out of its view). Every other module must be
+    free of video items.
+    """
+    for title, items in _modules():
+        if title not in _NON_VIDEO_MODULES:
+            continue
         for it in items:
-            assert it["kind"] == "link", f"non-link kind: {it!r}"
+            assert it["kind"] != "video", f"video item leaked into {title!r}: {it!r}"
+
+
+def test_short_course_notes_module_structure():
+    """Verifies the new short-course module mirrors OCW: intro note, complete
+    slides, 6 Tsinghua-2014 lecture-slide PDFs, and the 7 Summer-2012 PDFs.
+    """
+    mods = dict(_modules())
+    items = mods["Approximate DP — Short-course lecture notes (Bertsekas 2014 + 2012)"]
+    # 1 note + 1 complete-slides link + 1 header + 6 lecture links +
+    # 1 header + 8 Summer-2012 links (Short Course Notes + 7 lectures) = 18.
+    assert len(items) == 18
+
+    assert items[0]["kind"] == "note"
+    assert "Tsinghua" in items[0]["text_md"]
+    assert "Shuvomoy Das Gupta" in items[0]["text_md"]
+
+    assert items[1]["kind"] == "link"
+    assert items[1]["title"] == "Complete Slides (PDF — 1.6MB)"
+    assert items[1]["url"] == _resource_url(COMPLETE_SLIDES_SLUG)
+
+    headers = [it for it in items if it["kind"] == "header"]
+    assert [h["title"] for h in headers] == [
+        "Summer 2014 — Tsinghua Short Course (6 lectures)",
+        "Summer 2012 — Short Course (7 lecture-note PDFs)",
+    ]
+
+    # Each Tsinghua lecture appears as a link with its OCW slide slug.
+    for n, title, slide_slug, _vids in TSINGHUA_2014_LECTURES:
+        match = next(
+            (it for it in items if it["title"] == f"Lecture {n} — {title} (PDF)"),
+            None,
+        )
+        assert match is not None, f"missing Tsinghua lecture {n} link"
+        assert match["url"] == _resource_url(slide_slug)
+        assert match.get("indent", 0) == 1
+
+    # Each Summer-2012 PDF appears verbatim.
+    for s12_title, s12_slug in SUMMER_2012_NOTES:
+        match = next((it for it in items if it["title"] == s12_title), None)
+        assert match is not None, f"missing Summer 2012 PDF {s12_title!r}"
+        assert match["url"] == _resource_url(s12_slug)
+
+
+def test_video_lectures_module_has_15_kind_video_items():
+    """OCW lists 3+3+2+2+3+2 = 15 video segments. Titles must match OCW
+    verbatim ("Approximate Dynamic Programming, Lecture N, Part P")."""
+    mods = dict(_modules())
+    items = mods["Video Lectures (Bertsekas 2014 Tsinghua)"]
+    expected = sum(len(vids) for _n, _t, _s, vids in TSINGHUA_2014_LECTURES)
+    assert expected == 15
+    assert len(items) == expected
+
+    for it in items:
+        assert it["kind"] == "video"
+        assert it["url"].startswith(BASE + "/resources/approximate-dynamic-programming-lecture-")
+        assert it["title"].startswith("Approximate Dynamic Programming, Lecture ")
+        assert ", Part " in it["title"]
+
+    # First 3 items are L1 parts 1-3 in order.
+    assert items[0]["title"] == "Approximate Dynamic Programming, Lecture 1, Part 1"
+    assert items[2]["title"] == "Approximate Dynamic Programming, Lecture 1, Part 3"
+    # Last item is L6 Part 2.
+    assert items[-1]["title"] == "Approximate Dynamic Programming, Lecture 6, Part 2"
+
+
+def test_direct_links_uses_tsinghua_attribution_not_asu():
+    """The Related-Video-Lectures direct link must say "Tsinghua short course"
+    (OCW's actual source). The earlier seed mistakenly said "ASU"."""
+    mods = dict(_modules())
+    items = mods["Direct links"]
+    titles = [it["title"] for it in items]
+    assert "Related video lectures (Bertsekas 2014 Tsinghua short course)" in titles
+    for t in titles:
+        assert "ASU" not in t
 
 
 # ---------------------------------------------------------- copy / metadata
@@ -332,10 +427,11 @@ def test_seed_assignment_counts(db):
     n_modules = len(c.modules)
     n_items = sum(len(m.items) for m in c.modules)
     n_assign = len(c.assignments)
-    # 4 modules: Direct links (7) + Lecture Slides (23) + Project Resources (1) +
-    # Practice Midterms (6) = 37 module items.
-    assert n_modules == 4
-    assert n_items == 37
+    # 6 modules: Direct links (7) + Lecture Slides (23) + Project Resources (1)
+    # + Practice Midterms (6) + Short-course notes (18) + Video Lectures (15)
+    # = 70 module items.
+    assert n_modules == 6
+    assert n_items == 70
     # 11 assignments: 9 PSets + 1 midterm + 1 project.
     assert n_assign == 11
 
@@ -513,7 +609,29 @@ def test_update_urls_noop_on_fresh_seed(db):
     assert counts["items_updated"] == 0
     assert counts["assignments_updated"] == 0
     assert counts["coverage_updated"] == 0
-    assert counts["items_examined"] == 7 + 23 + 1 + 6
+    assert counts["items_examined"] == 7 + 23 + 1 + 6 + 18 + 15
+
+
+def test_update_urls_renames_legacy_asu_title(db):
+    """An existing-DB course with the old "ASU" title gets renamed in place
+    so the user doesn't lose the row. Required because the user is
+    --force re-seeding 6.231, but other deployments may not."""
+    course = seed(db)
+    direct = next(m for m in course.modules if m.title == "Direct links")
+    related = next(
+        it for it in direct.items
+        if "Related video lectures" in it.title
+    )
+    related.title = "Related video lectures (Bertsekas 2014 ASU)"
+    db.commit()
+
+    counts = update_urls(db)
+    # At least the rename + URL refresh hit this item.
+    assert counts["items_updated"] >= 1
+    db.refresh(related)
+    assert related.title == (
+        "Related video lectures (Bertsekas 2014 Tsinghua short course)"
+    )
 
 
 def test_update_urls_restores_tampered_lecture_url(db):

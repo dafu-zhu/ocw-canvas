@@ -331,3 +331,82 @@ def _modules() -> list[tuple[str, list[dict]]]:
     out.append(("Gallager course notes", _gallager_notes_items()))
     out.append(("Practice exams", _practice_exams_items()))
     return out
+
+
+SYLLABUS_MD = """## Prerequisites
+6.041 / 6.341 (Probabilistic Systems Analysis & Applied Probability), or
+equivalent comfort with elementary probability: discrete and continuous random
+variables, expectation, conditioning, basic limit theorems. Some patience for
+careful mathematical reasoning.
+
+## Textbook
+- **Primary** — Gallager, *Stochastic Processes: Theory for Applications*
+  (Cambridge University Press, 2013). The OCW course notes (chapter PDFs
+  linked from the **Gallager course notes** module) are the 2011 draft of
+  this same book.
+- **Prerequisite text** — Bertsekas & Tsitsiklis, *Introduction to Probability*
+  (Athena Scientific, 2nd ed. 2008) — referenced for probability review.
+- The "updated and improved version" of Gallager's draft notes lives at the
+  web-archive link in the Direct links module.
+
+## Grading (mirror OCW)
+| Component | Weight |
+|---|---|
+| Problem sets (12) | 20% |
+| Midterm Quiz | 35% |
+| Final Exam | 45% |
+
+The original 6.262 syllabus splits the grade as 20% homework / 35% quiz /
+45% final. We mirror it exactly. Unlike most of the seeded courses, OCW
+publishes Gallager's official solutions for every problem set and every
+historical exam, so the AI grader compares your submission against the
+real reference — not a regenerated AI key. (You can find the solution
+PDFs linked from each assignment.)
+
+## Problem-set policy
+"Homework assignments will be passed out each Wednesday in class; your
+solutions are due the following Wednesday and official solutions will be
+available before the weekend." Collaboration is encouraged, but write your
+own solutions. For self-study: pick a weekly cadence and stick to it;
+don't peek at solutions until you've made an honest attempt.
+
+## Exams
+The graded midterm is the **Spring 2011 paper**; the graded final is the
+**Spring 2011 final**. OCW also publishes papers from 2010 (midterm only)
+and 2009 (midterm + final) with full solutions — they're linked from each
+exam assignment's description as additional practice, and also collected
+in the **Practice exams** module.
+"""
+
+HOME_MD = """**MIT 6.262 — Discrete Stochastic Processes (Gallager, Spring
+2011).** Course materials mirrored from MIT OCW. The term shown above is
+*your* self-study term — edit it from the course settings when your plan
+shifts.
+
+The proof-flavoured stochastic-processes course at MIT. Builds out the
+machinery for working with random processes that evolve in time — Bernoulli
+and Poisson, finite- and countable-state Markov chains, Markov processes,
+renewal processes (with Wald, M/G/1 queueing, Little's theorem), random
+walks and first-passage problems, and martingales (plain / sub- / super-,
+with optional stopping). The course notes are the working draft of
+Gallager's 2013 Cambridge textbook *Stochastic Processes: Theory for
+Applications*.
+
+Source: <https://ocw.mit.edu/courses/6-262-discrete-stochastic-processes-spring-2011/>.
+Textbook: Gallager (Cambridge 2013); the 2011 draft chapter PDFs are
+mirrored on OCW. Jump to **Syllabus**, **Modules**, or **Assignments**.
+"""
+
+DESCRIPTION = (
+    "Discrete stochastic processes: Bernoulli and Poisson processes, "
+    "finite- and countable-state Markov chains and processes, renewal "
+    "processes (Wald, M/G/1, Little's theorem), random walks and "
+    "first-passage problems, martingales and optional stopping."
+)
+
+TEXTBOOK = (
+    "Gallager, Stochastic Processes: Theory for Applications "
+    "(Cambridge 2013) — primary. The 2011 draft is mirrored on OCW "
+    "chapter-by-chapter. Bertsekas-Tsitsiklis, Introduction to "
+    "Probability (Athena 2008), is the prereq probability text."
+)

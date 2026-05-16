@@ -1,12 +1,16 @@
 from seed.seed_6_262 import (
     BASE,
     CODE,
+    DESCRIPTION,
     FINAL_SPEC,
     HOME,
+    HOME_MD,
     LECTURE_TOPICS,
     LECTURE_VIDEO_SLUGS,
     MIDTERM_SPEC,
     PROBLEM_SETS,
+    SYLLABUS_MD,
+    TEXTBOOK,
     _exam_sol_url,
     _exam_url,
     _modules,
@@ -160,3 +164,23 @@ def test_modules_gallager_notes_links_chapter_pdfs():
     for it in items:
         assert it["kind"] == "link"
         assert "mit6_262s11_" in it["url"]
+
+
+def test_syllabus_contains_grading_split():
+    assert "20%" in SYLLABUS_MD
+    assert "35%" in SYLLABUS_MD
+    assert "45%" in SYLLABUS_MD
+    assert "Quiz" in SYLLABUS_MD or "Midterm" in SYLLABUS_MD
+
+
+def test_home_md_mentions_gallager_and_term_label_is_user_set():
+    assert "Gallager" in HOME_MD
+    # The HOME_MD must remind the user that term_label is *their* self-study
+    # term, not the OCW recording year — see term_label memory.
+    assert "self-study" in HOME_MD
+
+
+def test_description_and_textbook_nonempty():
+    assert "Markov" in DESCRIPTION
+    assert "Gallager" in TEXTBOOK
+    assert "Stochastic Processes" in TEXTBOOK

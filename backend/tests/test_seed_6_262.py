@@ -1,7 +1,9 @@
 import httpx
 import pytest
 
-from app.models import Course
+import seed.seed_6_262 as seed_mod
+from app.models import Assignment, Course
+from app.services import storage as storage_mod
 from seed.seed_6_262 import (
     BASE,
     CODE,
@@ -349,3 +351,99 @@ def test_seed_force_recreates(db):
     c = seed(db, force=True)
     assert db.query(Course).filter(Course.code == "MIT 6.262").count() == 1
     assert len(c.assignments) == 14
+
+
+def _make_assignment(db) -> Assignment:
+    c = Course(code="TMP", title="t", institution="i", term_label="x")
+    db.add(c)
+    db.flush()
+    a = Assignment(
+        course_id=c.id,
+        title="x",
+        description_md="",
+        points_possible=100,
+        position=0,
+        published=True,
+        requires_solution_key=True,
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+def test_attach_official_solution_happy_path(db, monkeypatch, tmp_path):
+    a = _make_assignment(db)
+
+    # Fake the network: HTML page → fake PDF bytes.
+    captured = {}
+
+    def _fake_resolve(slug):
+        captured["resolved_slug"] = slug
+        return f"https://ocw.mit.edu/fake/{slug}.pdf"
+
+    class _Resp:
+        content = b"%PDF-1.4\nfakebytes"
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(seed_mod, "_resolve_pdf_url", _fake_resolve)
+    monkeypatch.setattr(seed_mod.httpx, "get", lambda url, **kw: _Resp())
+
+    # Force the storage layer to use a tmp local root, not Supabase.
+    monkeypatch.setattr(storage_mod, "_supabase_configured", lambda: False)
+    monkeypatch.setattr(storage_mod, "_LOCAL_ROOT", tmp_path)
+
+    seed_mod._attach_official_solution(db, a, "mit6_262s11_assn01_sol")
+    db.commit()
+    db.refresh(a)
+
+    assert a.official_solution_file_path == "official/6_262/mit6_262s11_assn01_sol.pdf"
+    assert a.official_solution_url.endswith("/resources/mit6_262s11_assn01_sol/")
+    stored = storage_mod.read_bytes("solutions", a.official_solution_file_path)
+    assert stored == b"%PDF-1.4\nfakebytes"
+
+
+def test_attach_official_solution_idempotent(db, monkeypatch, tmp_path):
+    a = _make_assignment(db)
+    # Pre-populate.
+    a.official_solution_file_path = "official/6_262/mit6_262s11_assn01_sol.pdf"
+    db.commit()
+    monkeypatch.setattr(storage_mod, "_supabase_configured", lambda: False)
+    monkeypatch.setattr(storage_mod, "_LOCAL_ROOT", tmp_path)
+    # Pre-write the file so the read succeeds.
+    storage_mod.upload_bytes(
+        "solutions",
+        "official/6_262/mit6_262s11_assn01_sol.pdf",
+        b"existing",
+        "application/pdf",
+    )
+
+    def _boom(*a, **k):
+        raise AssertionError("network must not be hit when already present")
+
+    monkeypatch.setattr(seed_mod, "_resolve_pdf_url", _boom)
+    monkeypatch.setattr(seed_mod.httpx, "get", _boom)
+
+    seed_mod._attach_official_solution(db, a, "mit6_262s11_assn01_sol")
+    db.commit()
+    # Still set, unchanged.
+    assert a.official_solution_file_path == "official/6_262/mit6_262s11_assn01_sol.pdf"
+
+
+def test_attach_official_solution_graceful_on_failure(db, monkeypatch, tmp_path):
+    a = _make_assignment(db)
+
+    def _fail_resolve(slug):
+        raise RuntimeError("simulated network failure")
+
+    monkeypatch.setattr(seed_mod, "_resolve_pdf_url", _fail_resolve)
+    monkeypatch.setattr(storage_mod, "_supabase_configured", lambda: False)
+    monkeypatch.setattr(storage_mod, "_LOCAL_ROOT", tmp_path)
+
+    # Must not raise.
+    seed_mod._attach_official_solution(db, a, "mit6_262s11_assn01_sol")
+    db.commit()
+    db.refresh(a)
+    # URL is still set as a fallback flag; file_path stays empty.
+    assert a.official_solution_file_path == ""
+    assert a.official_solution_url.endswith("/resources/mit6_262s11_assn01_sol/")

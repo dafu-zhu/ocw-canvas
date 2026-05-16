@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal  # noqa: F401 — used in later tasks (main() CLI)
 from app.models import Assignment, AssignmentGroup, Course, Module, ModuleItem
-from app.services import storage  # noqa: F401 — used in later tasks (PDF upload)
+from app.services import storage
 
 CODE = "MIT 6.262"
 BASE = (
@@ -137,6 +137,45 @@ def _resolve_pdf_url(slug: str) -> str:
         if needle in path.lower():
             return urljoin("https://ocw.mit.edu", path)
     raise RuntimeError(f"no PDF link matching slug '{slug}' on {page_url}")
+
+
+def _storage_key_for(slug: str) -> str:
+    """Path inside the ``solutions`` bucket. Namespaced under ``official/6_262/``
+    so it doesn't collide with AI-generated solutions (``solutions/{id}.md``)."""
+    return f"official/6_262/{slug}.pdf"
+
+
+def _attach_official_solution(db: Session, a: Assignment, slug: str) -> None:
+    """Download Gallager's solution PDF for ``slug`` and attach it to ``a``.
+
+    Idempotent: if ``a.official_solution_file_path`` already points at a
+    readable Storage object, do nothing.
+
+    Graceful: any download/upload failure is logged to stdout and leaves
+    ``official_solution_url`` set as the AI's URL-only fallback.
+    """
+    storage_key = _storage_key_for(slug)
+    landing_url = f"{BASE}/resources/{slug}/"
+
+    # Always set the URL — it's cheap and serves as a fallback flag.
+    a.official_solution_url = landing_url
+
+    if a.official_solution_file_path == storage_key:
+        try:
+            storage.read_bytes("solutions", storage_key)
+            return  # already uploaded; skip network
+        except Exception:  # noqa: BLE001 — re-download if storage object is gone
+            pass
+
+    try:
+        pdf_url = _resolve_pdf_url(slug)
+        resp = httpx.get(pdf_url, timeout=60)
+        resp.raise_for_status()
+        storage.upload_bytes("solutions", storage_key, resp.content, "application/pdf")
+        a.official_solution_file_path = storage_key
+    except Exception as exc:  # noqa: BLE001
+        # Don't break the seed for one missing solution; degrade to URL-only.
+        print(f"warn(seed_6_262): solution upload failed for {slug}: {exc}")
 
 
 # (lecture_number, topic, gallager_reading). The OCW calendar publishes

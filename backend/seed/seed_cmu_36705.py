@@ -12,7 +12,9 @@ docs/superpowers/specs/2026-05-13-cmu-36705-seed-design.md):
   - No video items: CMU's source has no public recordings.
   - Lecture notes use slots Lecture11a.pdf / Lecture12a.pdf (no plain 11 / 12).
   - HW filenames are mixed case: HW1 is lowercase ("homework1.pdf"), HW2-13 Title-case.
-  - Tests and Final have no source paper and no review handout.
+  - No tests or final exam: CMU's source posts no test paper / final paper / review
+    handout. Per the self-study seed-flexibility rule, these are omitted entirely
+    rather than included as ungradable phantoms — homeworks carry 100% of the grade.
 """
 from __future__ import annotations
 
@@ -68,10 +70,6 @@ HOMEWORKS: list[tuple[int, str, int, int]] = [
     (12, "Linear & nonparametric regression",          23, 24),
     (13, "Minimax, high-dim & model selection",        25, 27),
 ]
-# Tests are no-collaboration homeworks (per the syllabus). Cumulative coverage.
-TEST1_COVERS_TO = 7
-TEST2_COVERS_TO = 18
-FINAL_COVERS_TO = 27
 
 # (lecture_number, topic) for the 27 lecture notes. Topics inferred from the
 # syllabus calendar's session labels; the per-PDF titles aren't published on the
@@ -166,25 +164,22 @@ background.
 - (Advanced) van der Vaart, *Asymptotic Statistics* (2000).
 - (Advanced) Bickel & Doksum, *Mathematical Statistics* (1977).
 
-## Grading
+## Grading (self-study)
 | Component | Weight |
 |---|---|
-| Homework (13 problem sets, weekly) | 50% |
-| Test I (no-collaboration homework) | 10% |
-| Test II (no-collaboration homework) | 10% |
-| Final Exam | 30% |
+| Homework (13 problem sets, weekly) | 100% |
+
+CMU's syllabus splits the grade across homework / two tests / a final, but the
+source course posts no test paper, no final paper, and no review handout. Rather
+than carry ungradable phantom assignments, this self-study version drops them
+entirely — homeworks carry the full grade. Treat the homeworks as the genuine
+assessment of mastery. Don't search for solutions online; do them honestly.
 
 ## Homework policy
-Approximately weekly. You may discuss problems with other students but **write up
-your final solutions on your own**, crediting collaborators. Do not search for
-solutions online. No late assignments without prior approval.
-
-## Test / Final policy
-"The tests will just be homework assignments where you will not be allowed to
-collaborate with other students." The source course posts no test paper and no
-review handout — for self-study, ask the AI to generate fresh problems on the
-covered material at the chosen point in your schedule, or reserve one of the
-weekly homeworks as a no-collaboration test.
+Approximately weekly. The original CMU policy allows discussion with crediting,
+but for self-study you're flying solo: write up your own solutions, do not
+search for solutions online, and let the AI generate the reference key once
+you've submitted.
 """
 
 HOME_MD = """**CMU 36-705 — Intermediate Statistics.** Course materials from
@@ -224,28 +219,6 @@ def _hw_description(k: int, topic: str) -> str:
     )
 
 
-def _test_description(num: int, covers_to: int) -> str:
-    return (
-        f"Test {num} (no-collaboration homework, per syllabus §3). The source "
-        f"course posts no Test {num} paper and no review handout. For "
-        f"self-study, either ask the AI to generate fresh problems covering "
-        f"Lectures 1-{covers_to}, or reserve one of the weekly homeworks "
-        f"(HW1-HW{covers_to // 2 + 1}) as a no-collaboration test and submit "
-        "that here. Manual grading expected — there is no source PDF for the "
-        "AI to grade against."
-    )
-
-
-def _final_description() -> str:
-    return (
-        f"Final Exam, cumulative across Lectures 1-{FINAL_COVERS_TO}. The "
-        "source course posts no final paper and no review handout. For "
-        "self-study, ask the AI to generate a comprehensive exam covering all "
-        "course material, or assemble your own from the lecture notes. Manual "
-        "grading expected — there is no source PDF for the AI to grade against."
-    )
-
-
 def _unit_items(lo: int, hi: int, readings_md: str) -> list[dict]:
     """Lecture-note links for lectures [lo, hi], then a Readings note.
 
@@ -266,8 +239,8 @@ def _unit_items(lo: int, hi: int, readings_md: str) -> list[dict]:
 
 
 def _modules() -> list[tuple[str, list[dict]]]:
-    """The full module-tree: 1 direct-links module + 7 unit modules interleaved
-    with 2 in-term tests + 1 final = 11 modules."""
+    """1 direct-links module + 7 unit modules = 8 modules. No test/final modules
+    because CMU's source posts no test paper, final paper, or review handout."""
     out: list[tuple[str, list[dict]]] = [
         (
             "Direct links",
@@ -291,18 +264,8 @@ def _modules() -> list[tuple[str, list[dict]]]:
             ],
         ),
     ]
-    # Interleave units with the two tests and the final at the right
-    # cumulative-coverage stop-points.
-    test_stops = {
-        TEST1_COVERS_TO: "Test I",
-        TEST2_COVERS_TO: "Test II",
-    }
     for title, lo, hi, readings_md in UNITS:
         out.append((title, _unit_items(lo, hi, readings_md)))
-        if hi in test_stops:
-            label = test_stops[hi]
-            out.append((label, [{"kind": "assignment", "_assignment": label}]))
-    out.append(("Final Exam", [{"kind": "assignment", "_assignment": "Final Exam"}]))
     return out
 
 
@@ -340,18 +303,9 @@ def seed(db: Session, force: bool = False) -> Course:
     db.flush()
 
     g_hw = AssignmentGroup(
-        course_id=course.id, name="Homework", weight=50, drop_lowest_n=0, position=0
+        course_id=course.id, name="Homework", weight=100, drop_lowest_n=0, position=0
     )
-    g_t1 = AssignmentGroup(
-        course_id=course.id, name="Test I", weight=10, drop_lowest_n=0, position=1
-    )
-    g_t2 = AssignmentGroup(
-        course_id=course.id, name="Test II", weight=10, drop_lowest_n=0, position=2
-    )
-    g_fin = AssignmentGroup(
-        course_id=course.id, name="Final Exam", weight=30, drop_lowest_n=0, position=3
-    )
-    db.add_all([g_hw, g_t1, g_t2, g_fin])
+    db.add(g_hw)
     db.flush()
 
     by_name: dict[str, Assignment] = {}
@@ -371,50 +325,6 @@ def seed(db: Session, force: bool = False) -> Course:
         )
         db.add(a)
         by_name[a.title] = a
-
-    test1 = Assignment(
-        course_id=course.id,
-        assignment_group_id=g_t1.id,
-        title="Test I",
-        description_md=_test_description(1, TEST1_COVERS_TO),
-        points_possible=100,
-        accepts_files=True,
-        accepts_text=True,
-        position=0,
-        published=True,
-        covers_lecture_from=1,
-        covers_lecture_to=TEST1_COVERS_TO,
-    )
-    test2 = Assignment(
-        course_id=course.id,
-        assignment_group_id=g_t2.id,
-        title="Test II",
-        description_md=_test_description(2, TEST2_COVERS_TO),
-        points_possible=100,
-        accepts_files=True,
-        accepts_text=True,
-        position=0,
-        published=True,
-        covers_lecture_from=1,
-        covers_lecture_to=TEST2_COVERS_TO,
-    )
-    fin = Assignment(
-        course_id=course.id,
-        assignment_group_id=g_fin.id,
-        title="Final Exam",
-        description_md=_final_description(),
-        points_possible=100,
-        accepts_files=True,
-        accepts_text=True,
-        position=0,
-        published=True,
-        covers_lecture_from=1,
-        covers_lecture_to=FINAL_COVERS_TO,
-    )
-    db.add_all([test1, test2, fin])
-    by_name["Test I"] = test1
-    by_name["Test II"] = test2
-    by_name["Final Exam"] = fin
     db.flush()
 
     for mpos, (mtitle, items) in enumerate(_modules()):
@@ -492,7 +402,7 @@ def update_urls(db: Session) -> dict:
                 it.external_url = new_url
                 counts["items_updated"] += 1
 
-    # 2) Assignment description_md + lecture coverage.
+    # 2) Assignment description_md + lecture coverage (homeworks only).
     by_title = {a.title: a for a in course.assignments}
     for k, topic, lec_from, lec_to in HOMEWORKS:
         # Fuzzy match: prefix "Homework K" — user may have edited the topic suffix.
@@ -513,24 +423,6 @@ def update_urls(db: Session) -> dict:
             a.covers_lecture_from = lec_from
             a.covers_lecture_to = lec_to
             counts["coverage_updated"] += 1
-
-    # Test I / Test II / Final coverage + descriptions.
-    for title, cov_to, desc_fn in (
-        ("Test I", TEST1_COVERS_TO, lambda: _test_description(1, TEST1_COVERS_TO)),
-        ("Test II", TEST2_COVERS_TO, lambda: _test_description(2, TEST2_COVERS_TO)),
-        ("Final Exam", FINAL_COVERS_TO, _final_description),
-    ):
-        a = by_title.get(title)
-        if a is None:
-            continue
-        if a.covers_lecture_from != 1 or a.covers_lecture_to != cov_to:
-            a.covers_lecture_from = 1
-            a.covers_lecture_to = cov_to
-            counts["coverage_updated"] += 1
-        new_desc = desc_fn()
-        if a.description_md != new_desc:
-            a.description_md = new_desc
-            counts["assignments_updated"] += 1
 
     db.commit()
     return counts
